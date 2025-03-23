@@ -51,9 +51,9 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 4
+    num_envs: int = 20
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 20
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -151,14 +151,6 @@ def get_data():
 
 def make_env(env_id="TradeEnv-v0", df=None, **kwargs):
 
-    # path = "data/K_DAY/SH.513050-中概互联网ETF.csv"
-    # df = pd.read_csv(path)
-    # # columns = "code,name,time_key,open,close,high,low,pe_ratio,turnover_rate,volume,turnover,change_rate,last_close"
-    # columns = "code,time_key,open,close,high,low,change_rate".split(",")
-    # columns_rename = "instrument,datetime,open,close,high,low,change".split(",")
-    # df = df[columns]
-    # df.columns = columns_rename
-
     def thunk():
         env = gym.make(env_id, df=df, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -238,7 +230,7 @@ if __name__ == "__main__":
     df = get_data()
 
     # env setup
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [
             make_env(
                 args.env_id,
@@ -315,19 +307,18 @@ if __name__ == "__main__":
                 next_done
             ).to(device)
 
-            # print(infos)
-
-            # if "final_info" in infos:
-            #     for info in infos["final_info"]:
-            #         print(
-            #             f"global_step={global_step}, episodic_return={info['value']}, days = {info['days']}"
-            #         )
-            #         writer.add_scalar(
-            #             "charts/episodic_length", info["days"], global_step
-            #         )
-            #         writer.add_scalar(
-            #             "charts/episodic_return", info["value"], global_step
-            #         )
+            if "final_info" in infos:
+                for info in infos["final_info"]:
+                    if info and "episode" in info:
+                        print(
+                            f"global_step={global_step}, episodic_return={info['episode']['r']}"
+                        )
+                        writer.add_scalar(
+                            "charts/episodic_return", info["episode"]["r"], global_step
+                        )
+                        writer.add_scalar(
+                            "charts/episodic_length", info["episode"]["l"], global_step
+                        )
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -444,70 +435,62 @@ if __name__ == "__main__":
         )
 
     envs.close()
-
     agent.eval()
-    eval_env = make_env(
-        args.env_id,
-        df=df,
-        date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
-        weight_as_feature=args.weight_as_feature,
-        fee=args.fee,
-    )()
+    for action, action_name in {0: "norm", 1: "max", -1: "min", -2:"rand"}.items():
 
-    # eval_env = gym.vector.SyncVectorEnv(
-    #     [
-    #         make_env(
-    #             args.env_id, date_range=("2017-01-18 00:00:00", "2024-01-01 00:00:00")
-    #         )
-    #         for i in range(1)
-    #     ],
-    # )
+        writer = SummaryWriter(f"runs/{run_name}_a_{action_name}")
+        eval_env = make_env(
+            args.env_id,
+            df=df,
+            date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
+            weight_as_feature=args.weight_as_feature,
+            fee=args.fee,
+            override_action=action,
+        )()
 
-    obs, infos = eval_env.reset()
-    termindate = False
-    while not termindate:
-        days = infos["days"]
-        if days % 10 == 0:
-            print(infos)
-        # print(infos)
-        names = infos["names"]
-        writer.add_scalars(
-            main_tag="cmp",  # 主标签（图表标题）
-            tag_scalar_dict={
+        obs, infos = eval_env.reset()
+        termindate = False
+        while not termindate:
+            days = infos["days"]
+            if days % 10 == 0:
+                print(infos)
+            names = infos["names"]
+            tag_scalar_dict = {
                 "value": infos["value"].sum(),
-                **{
-                    f"close_norm_{names[i]}": infos["close_norm"][i]
-                    for i in range(len(names))
+            }
+            if action == 0:
+                tag_scalar_dict.update(
+                    {
+                        f"close_norm_{names[i]}": infos["close_norm"][i]
+                        for i in range(len(names))
+                    }
+                )
+            writer.add_scalars(
+                main_tag="cmp",  # 主标签（图表标题）
+                tag_scalar_dict=tag_scalar_dict,
+                global_step=infos["days"],
+            )
+
+            writer.add_scalar("return/reward", infos["reward"], infos["days"])
+            writer.add_scalar("return/total_fee", infos["total_fee"], infos["days"])
+            writer.add_scalar(
+                "return/max_draw_back", infos["max_draw_back"], infos["days"]
+            )
+
+            writer.add_scalars(
+                main_tag="eval",  # 主标签（图表标题）
+                tag_scalar_dict={
+                 
+                    **{
+                        f"ratio_{names[i]}": infos["ratio"][i]
+                        for i in range(len(names))
+                    },
+                  
                 },
-            },
-            global_step=infos["days"],
-        )
-
-        writer.add_scalar("return/reward", infos["reward"], infos["days"])
-        writer.add_scalar("return/total_fee", infos["total_fee"], infos["days"])
-        writer.add_scalar("return/max_draw_back", infos["max_draw_back"], infos["days"])
-
-        writer.add_scalars(
-            main_tag="eval",  # 主标签（图表标题）
-            tag_scalar_dict={
-                **{f"close_{names[i]}": infos["close"][i] for i in range(len(names))},
-                **{f"ratio_{names[i]}": infos["ratio"][i] for i in range(len(names))},
-                **{
-                    f"share_changed_{names[i]}": infos["share_changed"][i]
-                    for i in range(len(names))
-                },
-            },
-            global_step=infos["days"],
-        )
-
-        # writer.add_scalar("return/close", infos["close"][0], infos["days"])
-        # writer.add_scalar("return/ratio", infos["ratio"][0], infos["days"])
-        # writer.add_scalar(
-        #     "return/share_changed", infos["share_changed"][0], infos["days"]
-        # )
-
-        actions, _, _, _ = agent.get_action_and_value(torch.Tensor(obs).to(device))
-        next_obs, _, termindate, _, infos = eval_env.step(actions.cpu().numpy()[0])
-        obs = next_obs
-    eval_env.close()
-    writer.close()
+                global_step=infos["days"],
+            )
+            actions, _, _, _ = agent.get_action_and_value(torch.Tensor(obs).to(device))
+            next_obs, _, termindate, _, infos = eval_env.step(actions.cpu().numpy()[0])
+            obs = next_obs
+        eval_env.close()
+        writer.close()

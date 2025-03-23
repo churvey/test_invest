@@ -54,11 +54,13 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         max_length=None,
         fee=0.00001,
         weight_as_feature=True,
+        override_action=0,
         **kwargs,
     ):
 
         self.fee = fee
         self.weight_as_feature = weight_as_feature
+        self.override_action = override_action
         self.df = df.sort_values(["datetime", "instrument"])
         if date_range:
             begin, end = date_range
@@ -102,7 +104,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         )
 
         self.state: np.ndarray | None = None
-        self.date_df = None
+        # date_df = None
         self.date_index = 0
         self.weight = None
         self.value = 1.0
@@ -113,92 +115,57 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.total_fee = 0.0
         self.value_history = []
 
+    def rewards(self, old_close_v):
+        weights = np.array(self.actions)
+        old_shares = self.shares
+        values = self.value.sum() * weights
+        shares = values / old_close_v
+        share_changed = shares - old_shares
+        new_value = shares * self.close_v
+        fee = np.abs(share_changed) * old_close_v * self.fee
+        new_value -= fee
+
+        return new_value, fee
+
     def step(self, action):
         assert self.action_space.contains(
             action
         ), f"{action!r} ({type(action)}) invalid"
-        new_weight = self.actions[action]
         self.date_index += 1
         self.length += 1
         terminated = self.date_index >= len(self.dates) or self.length > self.max_length
         if not terminated:
-            need_change = np.abs(new_weight - self.weight) >= 1.0 / self.max_split
-            if np.any(need_change):
-                need_change[-1] = True
-                need_change_value = self.value[need_change].sum()
-                need_change_w_blance = new_weight[need_change] / (
-                    new_weight[need_change].sum() + 0.00001
-                )
-                self.value[need_change] = need_change_value * need_change_w_blance
-                new_shares = self.value / self.close_v
-            else:
-                new_shares = self.shares
-
-            share_changed = new_shares - self.shares
-            fee = (np.abs(share_changed) * self.close_v).sum() * self.fee
-            total_value_v = self.value.sum()
             old_close_v = self.close_v
-            old_shares = self.shares
             self._update_state()
+            self.value_history.append(self.value.sum())
+            values, fees = self.rewards(old_close_v)
 
-            # total_value_if_not_changed = (self.value * self.close_v / old_close_v).sum()
-            total_value_if_not_changed = (old_shares * self.close_v).sum()
-            # assert total_value_if_not_changed2 == total_value_if_not_changed, (total_value_if_not_changed2, total_value_if_not_changed)
+            if self.override_action < 0:
+                if self.override_action == -1:
+                    values_s = np.sum(values, axis=-1)
+                    action = np.argmin(values_s)
+                else:
+                    action = self.np_random.integers(0, len(self.actions))
 
-            self.shares = new_shares
-            self.value = self.shares * self.close_v
+            elif self.override_action > 0:
+                values_s = np.sum(values, axis=-1)
+                action = np.argmax(values_s)
+
+            # print(values.shape, action, len(self.actions))
+            # print(self.actions[action])
+            old_v = self.value.sum()
+            self.value = values[action]
+            # print(self.value.sum(), old_v)
+            reward = math.log(self.value.sum() / old_v)
+            self.shares = self.value / self.close_v
             self.weight = self.value / self.value.sum()
+            self.total_fee += fees[action].sum()
             if self.weight_as_feature:
                 self.state = np.concatenate([self.state, np.array(self.weight[:-1])])
 
-            # reward = self.value.sum() - total_value_v - fee
-            reward = self.value.sum() - total_value_if_not_changed - fee
-            self.total_fee += fee
-            # reward = self.value.sum() - total_value_v
-            self.value_history.append(self.value.sum())
-        
-            print(
-                self.date_index,
-                (
-                    self.value.sum() - total_value_v,
-                    self.value.sum(),
-                    total_value_v,
-                    self.value,
-                    old_close_v,
-                    self.close_v,
-                    old_shares,
-                    self.shares,
-                ),
-            )
-
-            # if self.value.sum() - total_value_v <= -0.1:
-            #     print(
-            #         "large draw ",
-            #         (
-            #             self.value.sum(),
-            #             total_value_v,
-            #             self.value,
-            #             old_close_v,
-            #             self.close_v,
-            #             old_shares,
-            #             self.shares,
-            #         ),
-            #     )
-            # assert self.value.sum() - total_value_v >= np.min(
-            #     self.close_v - old_close_v
-            # ) - np.max(self.close_v - old_close_v), (
-            #     self.value.sum(),
-            #     total_value_v,
-            #     self.value,
-            #     old_close_v,
-            #     self.close_v,
-            #     old_shares,
-            #     self.shares
-            # )
-
         else:
             reward = 0.0
-            share_changed = self.shares - self.shares
+            # share_changed = self.shares - self.shares
 
         max_draw_back = max(self.value_history) - self.value_history[-1]
 
@@ -217,7 +184,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                     "close_norm": self.close_v / self.close_init,
                     "ratio": self.weight,
                     "shares": self.shares,
-                    "share_changed": share_changed,
+                    # "share_changed": share_changed,
                     "total_fee": self.total_fee,
                     "max_draw_back": max_draw_back,
                     "names": self.instruments,
@@ -232,7 +199,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                     "close_norm": self.close_v / self.close_init,
                     "ratio": self.weight,
                     "shares": self.shares,
-                    "share_changed": share_changed,
+                    # "share_changed": share_changed,
                     "total_fee": self.total_fee,
                     "max_draw_back": max_draw_back,
                     "names": self.instruments,
@@ -242,17 +209,13 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
     def _update_state(self):
         date = self.dates[self.date_index]
-        self.date_df = self.df[self.df["datetime"] == date]
-        names = self.date_df["instrument"].to_list()
-        assert names == sorted(names)
-        assert np.all(names == self.instruments)
+        date_df = self.df[self.df["datetime"] == date]
         self.state = (
-            self.date_df[self.feature_columns].to_numpy(dtype="float32").reshape([-1])
+            date_df[self.feature_columns].to_numpy(dtype="float32").reshape([-1])
         )
-        close = self.date_df["close"].to_list()
+        close = date_df["close"].to_list()
         close.append(1.0)
         self.close_v = np.array(close)
-        # print("_update_state", self.close_v, self.state)
 
     def reset(
         self,
@@ -263,13 +226,14 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         super().reset(seed=seed)
         if seed is None:
             self.date_index = 0
+            self.value = np.array([0.0] * len(self.instruments) + [1.0])
         else:
             self.data_index = self.np_random.integers(0, len(self.dates))
-        self.shares = np.array([0.0] * len(self.instruments) + [1.0])
-        # print("shares", self.shares, len(self.shares) )
+            self.value = self.actions[self.np_random.integers(0, len(self.actions))]
+
         self._update_state()
         self.length = 0
-        self.value = self.shares * self.close_v
+        self.shares = self.value / self.close_v
         self.weight = self.value / self.value.sum()
         if self.weight_as_feature:
             self.state = np.concatenate([self.state, np.array(self.weight[:-1])])
