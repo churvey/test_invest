@@ -20,7 +20,7 @@ def corr(x, y):
     rs = np.zeros_like(c)
     vs = c != 0
     rs[vs] = v[vs] / c[vs]
-    
+
     return rs
 
 
@@ -286,6 +286,39 @@ class Feature:
             down = data[f"ma_{i}"] - 2 * data[f"std_{i}"]
             data[f"{name}_u_{i}"] = up
             data[f"{name}_d_{i}"] = down
+        return None
+
+    def z_pos(self, data):
+        name = "bollinger"
+        name_rs = "z_pos"
+
+        def _get(n="high"):
+            # high = np.concatenate([[float("nan")], data[n][:-1]])
+            # high = np.maximum(data[n], high)
+            return data[n]
+            # return high
+
+        high = _get()
+        low = _get("low")
+
+        def _pos(name):
+            p0 = low > data[name]
+            p1 = (low <= data[name]) & (high > data[name])
+            return [p0, p1]
+
+        for i in self.rolling_window:
+            rs = []
+            for n in [f"{name}_u_{i}", f"ma_{i}", f"{name}_d_{i}"]:
+                rs += _pos(n)
+            v = np.zeros(data["close"].shape)
+            # if i == 20:
+            #     print("rs", rs)
+            for p in rs:
+                v = v * 2 + ((v == 0) & p)
+            # if i == 20:   
+            #     print(i, f"{name_rs}_{i}", v, data["close"], np.unique(np.sort(v)))
+            data[f"{name_rs}_{i}"] = v
+
         return None
 
     def imax(self, data):

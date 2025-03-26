@@ -92,7 +92,7 @@ class Args:
     fee: float = 0.0001
 
 
-def get_data():
+def _get_data():
     path = [
         "tmp/SH.513050-中概互联网ETF.csv",
         # "data/K_DAY/SH.515290-银行ETF天弘.csv",
@@ -153,6 +153,34 @@ def get_data():
     print(df)
     return df
     # df = df[columns]
+
+
+def get_data():
+    path = [
+        "tmp/SH.513050-中概互联网ETF.csv",
+        # "data/K_DAY/SH.515290-银行ETF天弘.csv",
+    ]
+
+    df = pd.concat([pd.read_csv(p) for p in path])
+    # columns = "code,name,time_key,open,close,high,low,pe_ratio,turnover_rate,volume,turnover,change_rate,last_close"
+    columns = "code,time_key,open,close,high,low,volume,change_rate".split(",")
+    columns_rename = "instrument,datetime,open,close,high,low,volume,change".split(",")
+    df = df[columns]
+    df.columns = columns_rename
+
+    # keys = "open,close,high,low,volume".split(",")
+    all_inputs = {k: df[k].to_numpy() for k in df.columns}
+
+    from trade.data.feature.feature import Feature
+
+    data = Feature(all_inputs)()
+    df = pd.DataFrame(data)
+    df = df.dropna()
+    print(df["z_pos_20"].to_list())
+    # 1/0
+    print(f"columns:{len(df.columns)}")
+    print(df)
+    return df
 
 
 def make_env(env_id="TradeEnv-v0", df=None, **kwargs):
@@ -218,7 +246,7 @@ def train(args, df, agent, date_range, run_name):
                 # date_range=("2021-02-01 00:00:00", "2024-01-01 00:00:00"),
                 # date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
                 date_range=date_range,
-                max_length=120,
+                max_length=360,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
             )
@@ -497,7 +525,7 @@ if __name__ == "__main__":
                 args.env_id,
                 df=df.copy(),
                 # date_range=("2021-02-01 00:00:00", "2024-01-01 00:00:00"),
-                max_length=120,
+                max_length=360,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
             )
@@ -507,8 +535,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     dates = np.sort(np.unique(df["datetime"].to_numpy()))
 
-    train_len = 240 * 2
-    eval_len = 120
+    train_len = 360 * 4
+    eval_len = 360
 
     roll_num = (len(dates) - train_len) // eval_len
     print("roll_num", roll_num)
