@@ -57,9 +57,9 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.1
     """the discount factor gamma"""
-    gae_lambda: float = 0.95
+    gae_lambda: float = 0.09
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 4
     """the number of mini-batches"""
@@ -94,8 +94,8 @@ class Args:
 
 def get_data():
     path = [
-        "data/K_DAY/SH.513050-中概互联网ETF.csv",
-        "data/K_DAY/SH.515290-银行ETF天弘.csv",
+        "tmp/SH.513050-中概互联网ETF.csv",
+        # "data/K_DAY/SH.515290-银行ETF天弘.csv",
     ]
 
     df = pd.concat([pd.read_csv(p) for p in path])
@@ -125,6 +125,8 @@ def get_data():
 
     for f in talib.get_functions():
         # print(f)
+        if f in ["AD", "OBV"]:
+            continue
 
         func = abstract.Function(f)
         if "timeperiod" in func.info["parameters"]:
@@ -138,14 +140,18 @@ def get_data():
         # outputs = dict(zip(func.info["output_names"], outputs))
         output_names = [f"{f}_{o}" for o in func.info["output_names"]]
         outputs = dict(zip(output_names, outputs))
-        outputs = {k: v for k, v in outputs.items() if not np.all(np.isnan(v))}
+        outputs = {
+            k: v
+            for k, v in outputs.items()
+            if not np.all(np.isnan(v)) and v.dtype == np.float64
+        }
         # print(output_names)
         all_inputs.update(outputs)
     df = pd.DataFrame(all_inputs)
+    df = df.dropna()
     print(f"columns:{len(df.columns)}")
     print(df)
     return df
-
     # df = df[columns]
 
 
@@ -190,34 +196,10 @@ class Agent(nn.Module):
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
 
-if __name__ == "__main__":
-    register(
-        id="TradeEnv-v0",
-        entry_point="trade.model.env:TradeEnv",
-    )
-    args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.weight_as_feature}__no_fee_{args.fee==0.0}__{int(time.time())}"
-    if args.track:
-        import wandb
+def train(args, df, agent, date_range, run_name):
+    agent.train()
 
-        wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            sync_tensorboard=True,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
-        )
     writer = SummaryWriter(f"runs/{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -227,15 +209,15 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    df = get_data()
-
     # env setup
     envs = gym.vector.AsyncVectorEnv(
         [
             make_env(
                 args.env_id,
                 df=df,
-                date_range=("2021-02-01 00:00:00", "2024-01-01 00:00:00"),
+                # date_range=("2021-02-01 00:00:00", "2024-01-01 00:00:00"),
+                # date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
+                date_range=date_range,
                 max_length=120,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
@@ -247,10 +229,9 @@ if __name__ == "__main__":
         envs.single_action_space, gym.spaces.Discrete
     ), "only discrete action space is supported"
 
-    agent = Agent(envs).to(device)
+    #
     print(f"agent {agent}")
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
-
     # ALGO Logic: Storage setup
     obs = torch.zeros(
         (args.num_steps, args.num_envs) + envs.single_observation_space.shape
@@ -435,17 +416,23 @@ if __name__ == "__main__":
         )
 
     envs.close()
-    agent.eval()
-    for action, action_name in {0: "norm", 1: "max", -1: "min", -2:"rand"}.items():
 
+
+def eval(args, df, agent, date_range, run_name):
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    agent.eval()
+    # for action, action_name in {0: "norm", 1: "max", -1: "min", -2: "rand"}.items():
+    for action, action_name in {0: "norm", -2: "rand"}.items():
         writer = SummaryWriter(f"runs/{run_name}_a_{action_name}")
         eval_env = make_env(
             args.env_id,
             df=df,
-            date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
+            # date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
+            date_range=date_range,
             weight_as_feature=args.weight_as_feature,
             fee=args.fee,
             override_action=action,
+            eval=True,
         )()
 
         obs, infos = eval_env.reset()
@@ -480,12 +467,10 @@ if __name__ == "__main__":
             writer.add_scalars(
                 main_tag="eval",  # 主标签（图表标题）
                 tag_scalar_dict={
-                 
                     **{
                         f"ratio_{names[i]}": infos["ratio"][i]
                         for i in range(len(names))
                     },
-                  
                 },
                 global_step=infos["days"],
             )
@@ -494,3 +479,62 @@ if __name__ == "__main__":
             obs = next_obs
         eval_env.close()
         writer.close()
+
+
+if __name__ == "__main__":
+    register(
+        id="TradeEnv-v0",
+        entry_point="trade.model.env:TradeEnv",
+    )
+    args = tyro.cli(Args)
+    args.batch_size = int(args.num_envs * args.num_steps)
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    args.num_iterations = args.total_timesteps // args.batch_size
+    df = get_data()
+    envs = gym.vector.AsyncVectorEnv(
+        [
+            make_env(
+                args.env_id,
+                df=df.copy(),
+                # date_range=("2021-02-01 00:00:00", "2024-01-01 00:00:00"),
+                max_length=120,
+                weight_as_feature=args.weight_as_feature,
+                fee=args.fee,
+            )
+            for i in range(args.num_envs)
+        ],
+    )
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    dates = np.sort(np.unique(df["datetime"].to_numpy()))
+
+    train_len = 240 * 2
+    eval_len = 120
+
+    roll_num = (len(dates) - train_len) // eval_len
+    print("roll_num", roll_num)
+    time_start = int(time.time())
+    for i in range(roll_num):
+        agent = Agent(envs).to(device)
+
+        def to_date(p):
+            return (dates[p[0]], dates[p[1]])
+
+        train_range = i * eval_len, i * eval_len + train_len
+        train_range = to_date(train_range)
+        eval_ranges = [
+            (i * eval_len + train_len - eval_len, i * eval_len + train_len),
+            (i * eval_len + train_len, i * eval_len + train_len + eval_len),
+        ]
+        eval_ranges = [to_date(r) for r in eval_ranges]
+        print("eval ranges:", eval_ranges)
+        run_name = (
+            f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}__{time_start}"
+        )
+        train(args, df.copy(), agent, eval_ranges[0], run_name)
+
+        for j, eval_range in enumerate(eval_ranges):
+            run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}_eval_{j}__{time_start}"
+            eval(args, df.copy(), agent, eval_range, run_name)
+            # break
+        # break
+    envs.close()

@@ -55,13 +55,16 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         fee=0.00001,
         weight_as_feature=True,
         override_action=0,
+        eval=False,
         **kwargs,
     ):
 
         self.fee = fee
+        self.eval = eval
         self.weight_as_feature = weight_as_feature
         self.override_action = override_action
         self.df = df.sort_values(["datetime", "instrument"])
+        self.dates_all = np.sort(np.unique(self.df["datetime"].to_numpy()))
         if date_range:
             begin, end = date_range
             self.df = self.df[
@@ -77,6 +80,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         print(f"weight_as_feature: {self.weight_as_feature} fee:{self.fee}")
 
         self.dates = np.sort(np.unique(self.df["datetime"].to_numpy()))
+        self.date_offset = np.argmax(self.dates_all == self.dates[0])
         self.feature_columns = [
             col
             for col in self.df.columns
@@ -167,7 +171,11 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             reward = 0.0
             # share_changed = self.shares - self.shares
 
-        max_draw_back = max(self.value_history) - self.value_history[-1]
+        max_draw_back = (
+            max(self.value_history) - self.value_history[-1]
+            if self.value_history
+            else 0
+        )
 
         return (
             self.state,
@@ -177,7 +185,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             (
                 {
                     "value": self.value,
-                    "days": self.date_index,
+                    "days": self.date_index + self.date_offset,
                     "date": self.dates[self.date_index],
                     "reward": reward,
                     "close": self.close_v,
@@ -224,12 +232,14 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
-        if seed is None:
+        if self.eval:
             self.date_index = 0
             self.value = np.array([0.0] * len(self.instruments) + [1.0])
         else:
-            self.data_index = self.np_random.integers(0, len(self.dates))
+            self.date_index = self.np_random.integers(0, len(self.dates))
             self.value = self.actions[self.np_random.integers(0, len(self.actions))]
+
+        # print("index", self.date_index , len(self.dates))
 
         self._update_state()
         self.length = 0
@@ -245,7 +255,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.state,
             {
                 "value": self.value,
-                "days": self.date_index,
+                "days": self.date_index + self.date_offset,
                 "date": self.dates[self.date_index],
                 "reward": 0,
                 "close": self.close_v,
