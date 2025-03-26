@@ -228,10 +228,10 @@ class Feature:
             data[f"{name}_{i}"] = val
 
     def ma(self, data):
-        return self.__rolling__(data, "ma", np.nanmean)
+        return self.__rolling__(data, "ma", np.nanmean, func2 = None)
 
     def std(self, data):
-        return self.__rolling__(data, "std", np.nanstd)
+        return self.__rolling__(data, "std", np.nanstd, func2 = None)
 
     def max(self, data):
         return self.__rolling__(data, "max", np.nanmax, "high")

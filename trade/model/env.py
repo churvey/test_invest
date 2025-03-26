@@ -118,6 +118,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.shares = None
         self.total_fee = 0.0
         self.value_history = []
+        self.additions = 0
 
     def rewards(self, old_close_v):
         weights = np.array(self.actions)
@@ -127,9 +128,21 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         share_changed = shares - old_shares
         new_value = shares * self.close_v
         fee = np.abs(share_changed) * old_close_v * self.fee
+        fee[:, -1] = 0
         new_value -= fee
 
-        return new_value, fee
+        idx = self.feature_columns.index("z_pos_20")
+        z_pos = self.state.reshape([-1, len(self.feature_columns)])[:, idx]
+        sold_a = (z_pos == 8) * (-share_changed * old_close_v)[:, :-1] * 0.001
+        buy_a = (z_pos == 2) * (share_changed * old_close_v)[:, :-1] * 0.001
+
+        total_a = (z_pos == 8) | (z_pos == 2)
+        # print("sold_a", sold_a)
+        # print("buy_a", buy_a)
+
+        # total_a = sold_a + buy_a
+
+        return new_value, fee, total_a
 
     def step(self, action):
         assert self.action_space.contains(
@@ -142,7 +155,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             old_close_v = self.close_v
             self._update_state()
             self.value_history.append(self.value.sum())
-            values, fees = self.rewards(old_close_v)
+            values, fees, total_a = self.rewards(old_close_v)
 
             if self.override_action < 0:
                 if self.override_action == -1:
@@ -160,7 +173,15 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             old_v = self.value.sum()
             self.value = values[action]
             # print(self.value.sum(), old_v)
+            # addition = (total_a[action] * values[action]).sum()
+            # print(self.value, self.value + fees[action] , self.value.sum() , old_v)
+            
             reward = math.log(self.value.sum() / old_v)
+            # 
+            addition = 0 if not total_a[0] else reward * 0.05
+            # print(total_a, addition)
+            reward += addition
+            self.additions += addition
             self.shares = self.value / self.close_v
             self.weight = self.value / self.value.sum()
             self.total_fee += fees[action].sum()
@@ -196,6 +217,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                     "total_fee": self.total_fee,
                     "max_draw_back": max_draw_back,
                     "names": self.instruments,
+                    "addition": addition != 0,
                 }
                 if not terminated
                 else {
@@ -211,6 +233,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                     "total_fee": self.total_fee,
                     "max_draw_back": max_draw_back,
                     "names": self.instruments,
+                    "addition": self.additions,
                 }
             ),
         )
@@ -266,6 +289,7 @@ class TradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                 "total_fee": self.total_fee,
                 "max_draw_back": 0,
                 "names": self.instruments,
+                "addition": 0,
             },
         )
 

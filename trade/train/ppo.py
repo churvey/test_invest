@@ -238,7 +238,7 @@ def train(args, df, agent, date_range, run_name):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.AsyncVectorEnv(
+    envs = gym.vector.SyncVectorEnv(
         [
             make_env(
                 args.env_id,
@@ -328,6 +328,13 @@ def train(args, df, agent, date_range, run_name):
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
+                        writer.add_scalar(
+                            "charts/addition", info["addition"], global_step
+                        )
+                        writer.add_scalar(
+                            "charts/reward_without_addition", info["episode"]["r"] - info["addition"], global_step
+                        )
+                        
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -499,6 +506,9 @@ def eval(args, df, agent, date_range, run_name):
                         f"ratio_{names[i]}": infos["ratio"][i]
                         for i in range(len(names))
                     },
+                    **{
+                        "addition": infos["addition"]
+                    }
                 },
                 global_step=infos["days"],
             )
@@ -534,6 +544,8 @@ if __name__ == "__main__":
     )
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     dates = np.sort(np.unique(df["datetime"].to_numpy()))
+    
+    # dates = dates[:-360]
 
     train_len = 360 * 4
     eval_len = 360
