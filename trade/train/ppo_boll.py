@@ -230,10 +230,7 @@ def train(args, df, agent, date_range, run_name):
     writer = SummaryWriter(f"runs/{run_name}")
 
     # TRY NOT TO MODIFY: seeding
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
+
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
@@ -249,7 +246,7 @@ def train(args, df, agent, date_range, run_name):
                 max_length=360,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
-                eval=True,
+                # eval=True,
             )
             for i in range(args.num_envs)
         ],
@@ -529,6 +526,11 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = args.torch_deterministic
+    
     df = get_data()
     envs = gym.vector.SyncVectorEnv(
         [
@@ -570,7 +572,7 @@ if __name__ == "__main__":
         run_name = (
             f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}__{time_start}"
         )
-        train(args, df.copy(), agent, eval_ranges[0], run_name)
+        train(args, df.copy(), agent, train_range, run_name)
 
         for j, eval_range in enumerate(eval_ranges):
             run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}_eval_{j}__{time_start}"
