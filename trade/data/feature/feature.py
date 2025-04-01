@@ -304,6 +304,9 @@ class Feature:
         def _pos(name):
             p0 = low > data[name]
             p1 = (low <= data[name]) & (high > data[name])
+            if "_d_" in name:
+                p2 = (high <= data[name])
+                return [p0, p1, p2]
             return [p0, p1]
 
         for i in self.rolling_window:

@@ -65,37 +65,66 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.weight_as_feature = weight_as_feature
         self.override_action = override_action
         self.df = df.sort_values(["datetime", "instrument"])
+
+        min_date = max(
+            list(self.df.groupby("instrument")["datetime"].min().to_dict().values())
+        )
+
+        self.df = self.df[self.df["datetime"] >= min_date]
         self.dates = np.sort(np.unique(self.df["datetime"].to_numpy())).tolist()
+                
 
         self.date_start = 0
         self.date_end = len(self.dates)
 
         if date_range:
             begin, end = date_range
+            if begin < min_date:
+                begin = min_date
             self.date_start = self.dates.index(begin)
             self.date_end = self.dates.index(end)
+            
+        self.instruments = np.sort(np.unique(self.df["instrument"].to_numpy()))
+    
 
         if instruments:
-            self.instruments = sorted(instruments)
-            self.df = self.df[self.df["instrument"].isin(instruments)]
+            for i in instruments:
+                assert i in self.instruments
+            self.instrument = instruments[0]
         else:
-            self.instruments = np.sort(np.unique(self.df["instrument"].to_numpy()))
+            self.instrument = self.instruments[0]
+        #     self.instruments = sorted(instruments)
+        #     self.df = self.df[self.df["instrument"].isin(instruments)]
+        # else:
+        #     self.instruments = np.sort(np.unique(self.df["instrument"].to_numpy()))
 
-        print(f"weight_as_feature: {self.weight_as_feature} fee:{self.fee}")
+        print(f"weight_as_feature: {self.weight_as_feature} fee:{self.fee} {self.instrument}")
 
-        self.dates = np.sort(np.unique(self.df["datetime"].to_numpy()))
+        # self.dates = np.sort(np.unique(self.df["datetime"].to_numpy()))
 
         self.feature_columns = [
             col
             for col in self.df.columns
             if col not in ["datetime", "instrument", "volume"]
         ]
-        self.all_state = self.df[self.feature_columns].to_numpy()
-        self.all_close_v = self.df["close"].to_numpy()
+        # self.instruments = self.instruments[:1]
+        # self.all_state = self.df[self.df["instrument"] == self.instrument][self.feature_columns].to_numpy().reshape(
+        self.all_state = self.df[self.feature_columns].to_numpy().reshape(
+            [len(self.dates), len(self.instruments) * len(self.feature_columns)]
+        )
+       
+        # self.df[self.df["instrument"] == self.instrument]
+        self.all_close_v = self.df[self.df["instrument"] == self.instrument]["close"].to_numpy().reshape([
+            len(self.dates)
+        ])
 
-        self.all_z_pos = self.df["z_pos_20"].to_numpy()
+        self.all_z_pos = self.df[self.df["instrument"] == self.instrument]["z_pos_20"].to_numpy().reshape([
+            len(self.dates)
+        ])
 
-        self.actions = get_actions(self.max_split, len(self.instruments))
+        # self.actions = get_actions(self.max_split, len(self.instruments))
+        
+        self.actions = get_actions(self.max_split, 1)
 
         self.action_space = spaces.Discrete(len(self.actions))
 
@@ -106,7 +135,7 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             np.inf,
             (
                 len(self.instruments)
-                * (len(self.feature_columns) + self.weight_as_feature),
+                * (len(self.feature_columns)) + self.weight_as_feature,
             ),
             dtype=np.float32,
         )
@@ -197,7 +226,10 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.value = 1
 
         self._update_state()
-        if not self.eval and self.np_random.integers(self.date_start, self.date_end) % 2 == 1:
+        if (
+            not self.eval
+            and self.np_random.integers(self.date_start, self.date_end) % 2 == 1
+        ):
             self.cash = self.np_random.random()
             print(f"cash init {self.cash}")
             self.shares = (self.value - self.cash) * (1 - self.fee) / self.close_v

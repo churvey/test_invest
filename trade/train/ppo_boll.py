@@ -158,7 +158,7 @@ def _get_data():
 def get_data():
     path = [
         "tmp/SH.513050-中概互联网ETF.csv",
-        # "data/K_DAY/SH.515290-银行ETF天弘.csv",
+        "tmp/SH.515290-银行ETF天弘.csv",
     ]
 
     df = pd.concat([pd.read_csv(p) for p in path])
@@ -230,7 +230,6 @@ def train(args, df, agent, date_range, run_name):
     writer = SummaryWriter(f"runs/{run_name}")
 
     # TRY NOT TO MODIFY: seeding
-
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
@@ -332,7 +331,6 @@ def train(args, df, agent, date_range, run_name):
                         # writer.add_scalar(
                         #     "charts/reward_without_addition", info["episode"]["r"] - info["addition"], global_step
                         # )
-                        
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -479,11 +477,7 @@ def eval(args, df, agent, date_range, run_name):
                 "value": infos["value"],
             }
             if action == 0:
-                tag_scalar_dict.update(
-                    {
-                        f"close_norm": infos["close_norm"]
-                    }
-                )
+                tag_scalar_dict.update({f"close_norm": infos["close_norm"]})
             writer.add_scalars(
                 main_tag="cmp",  # 主标签（图表标题）
                 tag_scalar_dict=tag_scalar_dict,
@@ -530,7 +524,7 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
-    
+
     df = get_data()
     envs = gym.vector.SyncVectorEnv(
         [
@@ -546,11 +540,19 @@ if __name__ == "__main__":
         ],
     )
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    dates = np.sort(np.unique(df["datetime"].to_numpy()))
-    
+    dates = make_env(
+        args.env_id,
+        df=df.copy(),
+        max_length=360,
+        weight_as_feature=args.weight_as_feature,
+        fee=args.fee,
+    )().dates
 
     train_len = 360 * 4
     eval_len = 360
+    
+    if train_len + eval_len >= len(dates):
+        train_len = len(dates) - eval_len - 1
 
     roll_num = (len(dates) - train_len) // eval_len
     print("roll_num", roll_num)
