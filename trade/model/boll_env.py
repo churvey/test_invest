@@ -93,6 +93,7 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.instrument = instruments[0]
         else:
             self.instrument = self.instruments[0]
+        self.instrument_index = self.instruments.tolist().index(self.instrument)
         #     self.instruments = sorted(instruments)
         #     self.df = self.df[self.df["instrument"].isin(instruments)]
         # else:
@@ -135,10 +136,11 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             np.inf,
             (
                 len(self.instruments)
-                * (len(self.feature_columns)) + self.weight_as_feature,
+                * (len(self.feature_columns) + self.weight_as_feature),
             ),
             dtype=np.float32,
         )
+       
 
         # update
         self.state: np.ndarray | None = None
@@ -176,9 +178,9 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             cur_pos = self.z_pos
             while True:
                 self._update_state()
-                if cur_pos != self.z_pos or self.date_index >= self.date_end - 1:
-                    reward = math.log(self.value / old_value)
-                    break
+                # if cur_pos != self.z_pos or self.date_index >= self.date_end - 1:
+                reward = math.log(self.value / old_value)
+                break
 
         return (
             self.state,
@@ -194,6 +196,7 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                 "close_norm": self.close_v / self.close_init,
                 "shares": self.shares,
                 "total_fee": self.total_fee,
+                "cash":self.cash,
             },
         )
 
@@ -203,7 +206,9 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.z_pos = self.all_z_pos[self.date_index]
         self.state = self.all_state[self.date_index]
         if self.weight_as_feature:
-            self.state = np.concatenate([self.state, [self.shares]])
+            weights = np.zeros(len(self.instruments))
+            weights[self.instrument_index] = 1 - (self.cash / self.value)
+            self.state = np.concatenate([self.state, weights])
         self.value = self.shares * self.close_v + self.cash
 
     def reset(
@@ -224,6 +229,14 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                 self.np_random.integers(self.date_start, self.date_end) - 1
             )
             self.value = 1
+            self.instrument_index = self.np_random.integers(0, self.instruments.shape[0])
+            self.instrument = self.instruments[self.instrument_index]
+            self.all_close_v = self.df[self.df["instrument"] == self.instrument]["close"].to_numpy().reshape([
+                len(self.dates)
+            ])
+            self.all_z_pos = self.df[self.df["instrument"] == self.instrument]["z_pos_20"].to_numpy().reshape([
+                len(self.dates)
+            ])
 
         self._update_state()
         if (
@@ -252,6 +265,7 @@ class BollTradeEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                 "close_norm": self.close_v / self.close_init,
                 "shares": self.shares,
                 "total_fee": self.total_fee,
+                "cash":self.cash,
             },
         )
 

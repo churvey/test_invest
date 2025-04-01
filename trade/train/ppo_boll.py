@@ -47,9 +47,9 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "TradeEnv-v0"
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 500000 * 2
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 1e-4 
     """the learning rate of the optimizer"""
     num_envs: int = 20
     """the number of parallel game environments"""
@@ -57,9 +57,9 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.1
     """the discount factor gamma"""
-    gae_lambda: float = 0.95
+    gae_lambda: float = 0.09
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 4
     """the number of mini-batches"""
@@ -158,7 +158,9 @@ def _get_data():
 def get_data():
     path = [
         "tmp/SH.513050-中概互联网ETF.csv",
-        "tmp/SH.515290-银行ETF天弘.csv",
+        "tmp/SH.510300-沪深300ETF.csv",
+        "tmp/SH.512880-证券ETF.csv",
+        "tmp/SH.518880-黄金ETF.csv"
     ]
 
     df = pd.concat([pd.read_csv(p) for p in path])
@@ -245,6 +247,7 @@ def train(args, df, agent, date_range, run_name):
                 max_length=360,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
+                instruments=["SH.513050"],
                 # eval=True,
             )
             for i in range(args.num_envs)
@@ -449,7 +452,7 @@ def train(args, df, agent, date_range, run_name):
     envs.close()
 
 
-def eval(args, df, agent, date_range, run_name):
+def eval(args, df, agent, date_range, ins, run_name):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     agent.eval()
     # for action, action_name in {0: "norm", 1: "max", -1: "min", -2: "rand"}.items():
@@ -459,9 +462,11 @@ def eval(args, df, agent, date_range, run_name):
             args.env_id,
             df=df,
             # date_range=("2024-01-01 00:00:00", "2025-01-01 00:00:00"),
+            max_length=360,
             date_range=date_range,
             weight_as_feature=args.weight_as_feature,
             fee=args.fee,
+            instruments=[ins],
             override_action=action,
             eval=True,
         )()
@@ -475,6 +480,7 @@ def eval(args, df, agent, date_range, run_name):
             # names = infos["names"]
             tag_scalar_dict = {
                 "value": infos["value"],
+                "cash": infos["cash"],
             }
             if action == 0:
                 tag_scalar_dict.update({f"close_norm": infos["close_norm"]})
@@ -486,23 +492,7 @@ def eval(args, df, agent, date_range, run_name):
 
             writer.add_scalar("return/reward", infos["reward"], infos["days"])
             writer.add_scalar("return/total_fee", infos["total_fee"], infos["days"])
-            # writer.add_scalar(
-            #     "return/max_draw_back", infos["max_draw_back"], infos["days"]
-            # )
 
-            # writer.add_scalars(
-            #     main_tag="eval",  # 主标签（图表标题）
-            #     tag_scalar_dict={
-            #         **{
-            #             f"ratio_{names[i]}": infos["ratio"][i]
-            #             for i in range(len(names))
-            #         },
-            #         **{
-            #             "addition": infos["addition"]
-            #         }
-            #     },
-            #     global_step=infos["days"],
-            # )
             actions, _, _, _ = agent.get_action_and_value(torch.Tensor(obs).to(device))
             next_obs, _, termindate, _, infos = eval_env.step(actions.cpu().numpy()[0])
             obs = next_obs
@@ -535,50 +525,56 @@ if __name__ == "__main__":
                 max_length=360,
                 weight_as_feature=args.weight_as_feature,
                 fee=args.fee,
+                instruments=["SH.513050"],
             )
             for i in range(args.num_envs)
         ],
     )
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    dates = make_env(
+    e = make_env(
         args.env_id,
         df=df.copy(),
         max_length=360,
         weight_as_feature=args.weight_as_feature,
         fee=args.fee,
-    )().dates
+        instruments=["SH.513050"],
+    )()
+    dates = e.dates
 
-    train_len = 360 * 4
-    eval_len = 360
-    
+    instruments = e.instruments
+
+    train_len = 360 * 10
+    eval_len = 360 * 2
+
     if train_len + eval_len >= len(dates):
         train_len = len(dates) - eval_len - 1
 
-    roll_num = (len(dates) - train_len) // eval_len
-    print("roll_num", roll_num)
+    eval_ranges = [(-180, len(dates) - 1), (-360, -180), (-180 * 3, -180 * 2)]
+
+    train_range = (0, -180 * 2)
+
+    agent = Agent(envs).to(device)
+
+    def to_date(p):
+        # print(p)
+        rs = (dates[p[0]], dates[p[1]])
+        print(p, "vs", rs)
+        return rs
+
+    train_range = to_date(train_range)
+
+    eval_ranges = [to_date(r) for r in eval_ranges]
+    print("ranges:", train_range, eval_ranges)
+
     time_start = int(time.time())
-    for i in range(roll_num):
-        agent = Agent(envs).to(device)
 
-        def to_date(p):
-            return (dates[p[0]], dates[p[1]])
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}_{time_start}"
+    train(args, df.copy(), agent, train_range, run_name)
 
-        train_range = i * eval_len, i * eval_len + train_len
-        train_range = to_date(train_range)
-        eval_ranges = [
-            (i * eval_len + train_len - eval_len, i * eval_len + train_len),
-            (i * eval_len + train_len, i * eval_len + train_len + eval_len),
-        ]
-        eval_ranges = [to_date(r) for r in eval_ranges]
-        print("eval ranges:", eval_ranges)
-        run_name = (
-            f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}__{time_start}"
-        )
-        train(args, df.copy(), agent, train_range, run_name)
-
-        for j, eval_range in enumerate(eval_ranges):
-            run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__roll_{i}_eval_{j}__{time_start}"
-            eval(args, df.copy(), agent, eval_range, run_name)
+    for j, eval_range in enumerate(eval_ranges):
+        for ins in instruments:
+            run_name = f"{args.env_id}__{args.exp_name}__{args.seed}_ins_{ins}_eval_{'_'.join(eval_range)}__{time_start}"
+            eval(args, df.copy(), agent, eval_range, ins, run_name)
             # break
         # break
     envs.close()
