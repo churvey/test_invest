@@ -53,7 +53,8 @@ class RegDNN(Model):
             min_lr=0.00001,
             eps=1e-08,
         )
-        self.loss_fn = mse
+        # self.loss_fn = mse
+        self.loss_fn = nn.L1Loss()
         self.device = device
         self.metrics = {"pcorr": PearsonCorrCoef().to(self.device)}
         self.scheduler_step = scheduler_step

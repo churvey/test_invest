@@ -178,6 +178,28 @@ def get_samplers_cpp(label_gen, date_ranges, csi=None):
     return {k: SamplersCpp(loader, v, csi) for k, v in date_ranges.items()}
 
 
+def get_label(data):
+    value = data["z_pos_20"]
+    v_8 = value == 8
+    v_32 = (value >= 32).astype("int64")
+    v_2 = (value <= 2).astype("int64")
+    diff = v_32 - v_2
+
+    for k in data.keys():
+        data[k] = data[k][v_8]
+
+    rs = np.zeros(value.shape)
+    for i in range(len(rs)):
+        if v_8[i]:
+            for j in range(i + 1, len(rs)):
+                if diff[j] != 0:
+                    rs[i] = diff[j]
+                    break
+    rs = rs[v_8] + 1
+    # print(np.unique(rs))
+    return rs
+
+
 if __name__ == "__main__":
 
     with Context() as ctx:
@@ -186,9 +208,13 @@ if __name__ == "__main__":
             l = data["close"].shape[0]
             return {
                 "pred": np.concatenate(
-                    [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
+                    [np.log(data["open"][2:] / data["close"][1:-1]), [float("nan")] * 2]
                 )[:l],
-                "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
+                # "pred": np.concatenate(
+                #     [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
+                # )[:l],
+                # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
+                #  "cls": get_label(data),
             }
 
         stages = ["train", "valid", "predict"]
@@ -205,11 +231,12 @@ if __name__ == "__main__":
         #     ("2017-01-01", "2020-12-31"),
         # ]
 
-        
         samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges)))
-        saved_models = from_cache(f"models.pkl")
+        # saved_models = from_cache(f"models.pkl")
+        saved_models = None
         # for save_name in ["cls", "reg"]:
-        for save_name in ["reg", "cls"]:
+        # for save_name in ["reg", "cls"]:
+        for save_name in ["reg"]:
             for k in samplers.keys():
                 samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
@@ -224,7 +251,7 @@ if __name__ == "__main__":
                 model_class = RegDNN if save_name == "reg" else ClsDNN
 
                 for i in schedule:
-                    model_name = f"s_{i}_{save_name}"
+                    model_name = f"s2_{i}_{save_name}"
                     models[model_name] = model_class(
                         len(samplers[stages[0]].feature_columns()),
                         scheduler_step=i,
