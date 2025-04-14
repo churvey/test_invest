@@ -23,8 +23,8 @@ def get_inst(path, type="all"):
 
 
 @ray.remote
-def parallel_get_stock_features(loader, stock, day_range):
-    return loader.get_stock_features(stock, day_range), stock
+def parallel_get_stock_features(loader, *args):
+    return loader.get_stock_features(*args)
 
 
 class Summarizer:
@@ -41,7 +41,79 @@ class Summarizer:
         return data.astype("float32")
 
 
-class Dataloader:
+class BaseDataloader:
+
+    def __init__(self, path, label_generators=[]):
+        self.path = path
+        self.label_generators = label_generators
+        self.indices = ["instrument", "datetime"]
+        self.base_columns = []
+        self.features = None
+    
+    @property
+    def feature_columns(self):
+        return [
+            i
+            for i in self.features.columns
+            if i not in (self.base_columns + self.labels + self.indices)
+        ]
+
+    def get_stock_params(self):
+        raise NotImplementedError
+
+    def get_features(self, n_parallel=16):
+        params = self.get_stock_params()
+        data = []
+        l = 0
+        tasks = []
+        for i, p in tqdm(enumerate(params)):
+            tasks.append(parallel_get_stock_features.remote(self, *p))
+            while len(tasks) >= n_parallel or (i == len(params) - 1 and tasks):
+                rs_np = None
+                try:
+                    ready, tasks = ray.wait(tasks)
+                    rs_np = ray.get(ready)[0]
+                    single = pd.DataFrame.from_dict(rs_np)
+                except BaseException as e:
+                    assert rs_np is not None, str(e)
+                    shape = {k: v.shape for k, v in rs_np.items()}
+                    print(f" {stock}: shapes {shape} {e}")
+                data.append(single)
+        return pd.concat(data)
+
+    def add_columns(self, data):
+        from .feature.feature import Feature
+
+        if not self.base_columns:
+            self.base_columns = list(data.keys())
+
+        data = Feature(data=data)()
+        labels = {}
+        for gen in self.label_generators:
+            labels.update({f"y_{k}": v for k, v in gen(data).items()})
+        data.update(labels)
+        return data
+    
+    @property
+    def labels(self):
+        return [i for i in self.features.columns if i.startswith("y_")]
+
+
+class QlibDataloader(BaseDataloader):
+
+    def __init__(self, path, label_generators=[], csi = None):
+        super(QlibDataloader, self).__init__(path, label_generators)
+        self.csi = csi
+        self.csi_ins = {}
+        if self.csi:
+            self.csi_ins = get_inst(self.path, self.csi)
+        self.days = self.get_all_days()
+        self.features = self.get_features()
+
+
+    def get_stock_params(self):
+        d = get_inst(self.path)
+        return list(d.items())[1000:1050]
 
     def get_all_days(self):
         days_path = os.path.join(self.path, "calendars", "day.txt")
@@ -64,6 +136,8 @@ class Dataloader:
 
     def get_stock_features(self, stock, day_range):
         data = {}
+        if self.csi_ins and stock not in self.csi_ins:
+            return data
         f_days = np.array(self.get_stock_days(None, day_range))
         feature_path = os.path.join(self.path, "features", stock.lower())
         for file_name in os.listdir(feature_path):
@@ -79,94 +153,45 @@ class Dataloader:
         data["datetime"] = f_days
         data["instrument"] = np.full_like(f_days, stock)
         data = self.add_columns(data)
-        return data
-
-    def get_base_columns(self):
-        path = os.path.join(self.path, "features")
-        # print(os.listdir(path))
-        feature_path = os.path.join(path, os.listdir(path)[0])
-        # print(feature_path)
-        # feature_path = os.path.join(self.path, "features", "SH000300")
-        return [file_name.split(".")[0] for file_name in os.listdir(feature_path)]
-
-    @property
-    def feature_columns(self):
-        return [
-            i
-            for i in self.features.columns
-            if i not in (self.base_columns + self.labels + self.indices)
-        ]
-
-    def get_inst(self, type="all"):
-        return get_inst(self.path, type=type)
-
-    def get_features(self, n_parallel=16, type="all"):
-        ins = self.get_inst(type)
-        data = []
-        l = 0
-        tasks = []
-        for i, (stock, day_range) in tqdm(enumerate(ins.items())):
-            tasks.append(parallel_get_stock_features.remote(self, stock, day_range))
-            while len(tasks) >= n_parallel or (i == len(ins.items()) - 1 and tasks):
-                rs_np = None
-                try:
-                    ready, tasks = ray.wait(tasks)
-                    rs_np, stock_get = ray.get(ready)[0]
-                    single = pd.DataFrame.from_dict(rs_np)
-                except BaseException as e:
-                    assert rs_np is not None, str(e)
-                    shape = {k: v.shape for k, v in rs_np.items()}
-                    print(f" {stock}: shapes {shape} {e}")
-                data.append(single)
-                r = l + len(data[-1])
-                self.inst_count[stock_get] = l, r
-                l = r
-            # ### debug
-            # if len(data) > 10:
-            #     break
-            # ### debug
-        return pd.concat(data)
-
-    def select_by_csi(self, csi="csi300"):
-        ins = self.get_inst(csi)
-        ind = np.zeros(len(self.features), dtype=bool)
-        date = self.features["datetime"]
-        for stock, day_ranges in ins.items():
-            if stock not in self.inst_count:
-                print(f"error , stock not found {stock}")
-                continue
-            ind_start, ind_end = self.inst_count[stock]
-            datetime = date[ind_start:ind_end]
+        
+        if self.csi_ins:
+            ind = np.zeros(len(f_days), dtype=bool)
+            day_ranges = self.csi_ins[stock]
+            ind_start, ind_end = 0, len(f_days)
+            datetime = f_days
             for i in range(0, len(day_ranges), 2):
                 begin, end = day_ranges[i], day_ranges[i + 1]
                 begin = ind_start + np.searchsorted(datetime, begin, "left")
                 end = ind_start + np.searchsorted(datetime, end, "right")
-                assert end <= ind_end
+                assert end <= ind_end, f"{ datetime, begin, end}" 
                 ind[begin:end] = True
+            data = {
+                k: v[ind] for k,v in data.items()
+            }
 
-        return self.features[ind]
+        return data
+
+class FtDataloader(BaseDataloader):
 
     def __init__(self, path, label_generators=[]):
-        self.path = path
-        self.inst_count = {}
-        self.label_generators = label_generators
-        self.indices = ["instrument", "datetime"]
-        self.base_columns = self.get_base_columns()
-        self.days = self.get_all_days()
+        super(FtDataloader, self).__init__(path, label_generators)
         self.features = self.get_features()
-        # self.labels = self.labels()
-        # self.feature_columns = self.feature_columns()
-
-    def add_columns(self, data):
-        from .feature.feature import Feature
-
-        data = Feature(data=data)()
-        labels = {}
-        for gen in self.label_generators:
-            labels.update({f"y_{k}": v for k, v in gen(data).items()})
-        data.update(labels)
-        return data
+        self.days = self.features["datetime"].unique()
     
-    @property
-    def labels(self):
-        return [i for i in self.features.columns if i.startswith("y_")]
+
+    def get_stock_params(self):
+        files = os.listdir(self.path)
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
+        return params
+
+    def get_stock_features(self, path):
+        path = [path] if not isinstance(path, list) else path
+        df = pd.concat([pd.read_csv(p) for p in path])
+        # columns = "code,name,time_key,open,close,high,low,pe_ratio,turnover_rate,volume,turnover,change_rate,last_close"
+        columns = "code,time_key,open,close,high,low,volume,change_rate".split(",")
+        columns_rename = "instrument,datetime,open,close,high,low,volume,change".split(",")
+        df = df[columns]
+        df.columns = columns_rename
+        data = {k: df[k].to_numpy() for k in df.columns}
+        data = self.add_columns(data)
+        return data

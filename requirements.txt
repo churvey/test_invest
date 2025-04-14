@@ -1,0 +1,10 @@
+backtrader
+torch
+pandas
+numpy
+gymnasium
+tyro
+tensorboard
+tqdm
+ray
+torchmetrics

@@ -8,7 +8,7 @@ import cloudpickle
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
-from trade.data.loader import Dataloader
+from trade.data.loader import QlibDataloader,FtDataloader
 from trade.data.sampler import *
 from trade.model.reg_dnn import RegDNN
 from trade.model.cls_dnn import ClsDNN
@@ -174,7 +174,9 @@ class Trainer:
 
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None):
-    loader = Dataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
+    # loader = FtDataloader("tmp", [label_gen])
     return {k: SamplersCpp(loader, v, csi) for k, v in date_ranges.items()}
 
 
