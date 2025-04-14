@@ -33,7 +33,7 @@ from torchmetrics.regression import (
         
 
 
-class RegDNN(Model):
+class RegDNN(Model, nn.Module):
 
     def __init__(self, input_dim, output_dim=1, device="cuda", scheduler_step=20):
         super(RegDNN, self).__init__()

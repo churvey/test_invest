@@ -45,7 +45,7 @@ class FocalBCEWithLogitsLoss(nn.Module):
         return focal_loss.mean()
 
 
-class ClsDNN(Model):
+class ClsDNN(Model, nn.Module):
 
     def __init__(
         self, input_dim, output_dim=3, device="cuda", weight=None, scheduler_step=20

@@ -8,6 +8,8 @@ import cloudpickle
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
+from catboost import CatBoostClassifier, Pool
+
 from trade.model.zoo import Net
 
 def mse(pred, target, weight = 1.0):
@@ -17,7 +19,7 @@ def mse(pred, target, weight = 1.0):
     return loss
 
 
-class Model(nn.Module):
+class Model:
 
     def __init__(self):
         super(Model, self).__init__()
@@ -35,3 +37,27 @@ class Model(nn.Module):
         pass
 
 
+class CatModel(Model):
+    def __init__(self):
+        self.model = CatBoostRegressor(
+                        iterations=2,
+                          depth=2,
+                          learning_rate=1,
+                          eval_metric='Logloss',
+                          loss_function='RMSE')
+
+    def train_step(self, data, step):
+        x = data["x"]
+        y = data["y_pred"]
+        train_pool = Pool(x, y)
+        self.model.fit(train_pool)
+        return {}
+
+    def valid_step(self, data, step):
+        pass
+
+    def predict_step(self, data, step):
+        x = data["x"]
+        test_pool = Pool(x)
+        preds = self.model.predict(test_pool)
+        return preds
