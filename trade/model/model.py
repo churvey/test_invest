@@ -8,7 +8,7 @@ import cloudpickle
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
-from catboost import CatBoostClassifier, Pool
+from catboost import CatBoostRegressor, Pool
 
 from trade.model.zoo import Net
 
