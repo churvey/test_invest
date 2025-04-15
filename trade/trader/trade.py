@@ -27,6 +27,7 @@ import datetime
 import random
 import os
 import pandas as pd
+import numpy as np
 
 import backtrader as bt
 
@@ -51,6 +52,132 @@ class FixedPerc(bt.Sizer):
         else:
             size = cashtouse // data.close[0]
         return size
+    
+class BollingerBandsStrategy(bt.Strategy):
+    params = (
+        ('n', 20),
+        ('ndev', 2.0),
+        ('printlog', True),        # comma is required
+    )
+
+    def __init__(self):
+        self.order = None
+        self.buyprice = None
+        self.buycomm = None
+        self.bar_executed = None
+        self.val_start = None
+        self.dataclose = self.datas[0].close
+        self.bollinger = bt.indicators.BollingerBands(self.dataclose, period=self.params.n, devfactor=self.params.ndev)
+        self.mb = self.bollinger.mid
+        self.ub = self.bollinger.top
+        self.lb = self.bollinger.bot
+
+    def log(self, txt, dt=None, doprint=False):
+        ''' Logging function fot this strategy'''
+        if self.params.printlog or doprint:
+            dt = dt or self.datas[0].datetime.date(0)
+            print('%s, %s' % (dt.isoformat(), txt))
+
+    def start(self):
+        self.val_start = self.broker.get_cash()  # keep the starting cash
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' % (trade.pnl, trade.pnlcomm))
+
+    def notify_order(self, order):
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:                # order.Partial
+            if order.isbuy():
+                self.log(
+                    'BUY EXECUTED, Price: %.2f, Size: %.0f, Cost: %.2f, Comm %.2f, RemSize: %.0f, RemCash: %.2f' %
+                    (order.executed.price,
+                     order.executed.size,
+                     order.executed.value,
+                     order.executed.comm,
+                     order.executed.remsize,
+                     self.broker.get_cash()))
+
+                self.buyprice = order.executed.price
+                self.buycomm = order.executed.comm
+            else:  # Sell
+                self.log('SELL EXECUTED, Price: %.2f, Size: %.0f, Cost: %.2f, Comm %.2f, RemSize: %.0f, RemCash: %.2f' %
+                         (order.executed.price,
+                          order.executed.size,
+                          order.executed.value,
+                          order.executed.comm,
+                          order.executed.remsize,
+                          self.broker.get_cash()))
+
+            self.bar_executed = len(self)
+        elif order.status in [order.Canceled, order.Expired, order.Margin, order.Rejected]:
+            self.log('Order Failed')
+
+        self.order = None
+
+    def next(self):
+        # Simply log the closing price of the series from the reference
+        # self.log('Close, %.2f' % self.data.close[0])
+        if self.order:
+            return
+        # need at least two bollinger records
+        if np.count_nonzero(~np.isnan(self.mb.get(0, len(self.mb)))) == 1:
+            return
+
+        # open long position; price backs up from below lower band
+        if self.position.size <= 0 \
+                and self.dataclose[0] > self.lb[0] \
+                and self.dataclose[-1] < self.lb[-1]:
+            self.order = self.buy()
+            self.log('BUY ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-LB: %.2f, LB: %.2f, Size: %.2f' %
+                     (self.dataclose[-1],
+                      self.dataclose[0],
+                      self.lb[-1],
+                      self.lb[0],
+                      self.getsizing(isbuy=True)))
+        # open short position; price backs down from above upper band
+        elif self.position.size >=0 \
+                and self.dataclose[0] < self.ub[0] \
+                and self.dataclose[-1] > self.ub[-1]:
+            self.order = self.sell()
+            self.log('SELL ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-UB: %.2f, UB: %.2f, Size: %.2f' %
+                     (self.dataclose[-1],
+                      self.dataclose[0],
+                      self.ub[-1],
+                      self.ub[0],
+                      self.getsizing(isbuy=False)))
+        # close short position
+        elif self.dataclose[0] < self.mb[0] and self.position.size < 0:
+            self.order = self.buy()
+            self.log('BUY ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-MB: %.2f, MB: %.2f, Size: %.2f' %
+                     (self.dataclose[-1],
+                      self.dataclose[0],
+                      self.mb[-1],
+                      self.mb[0],
+                      self.getsizing(isbuy=True)))
+        # close long position
+        elif self.dataclose[0] > self.mb[0] and self.position.size > 0:
+            self.order = self.sell()
+            self.log('SELL ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-MB: %.2f, MB: %.2f, Size: %.2f' %
+                     (self.dataclose[-1],
+                      self.dataclose[0],
+                      self.mb[-1],
+                      self.mb[0],
+                      self.getsizing(isbuy=False)))
+
+    def stop(self):
+        # calculate the actual returns
+        print(self.analyzers)
+        roi = (self.broker.get_value() / self.val_start) - 1.0
+        self.log('ROI:        {:.2f}%'.format(100.0 * roi))
+        self.log('(Bollinger params (%2d, %2d)) Ending Value %.2f' %
+                 (self.params.n, self.params.ndev, self.broker.getvalue()), doprint=True)
 
 
 class TheStrategy(bt.Strategy):
@@ -166,21 +293,26 @@ def runstrat(args=None):
             
             df.columns = columns_rename
             # print(df.index[0])
+            
             df["datetime"] = pd.to_datetime(df["datetime"])
+            df = df[df["datetime"] >= dkwargs['fromdate']]
             df = df.set_index("datetime")
             data0 = bt.feeds.PandasData(dataname=df)
             break
             
     cerebro.adddata(data0)
 
-    cerebro.addstrategy(TheStrategy,
-                        macd1=args.macd1, macd2=args.macd2,
-                        macdsig=args.macdsig,
-                        atrperiod=args.atrperiod,
-                        atrdist=args.atrdist,
-                        smaperiod=args.smaperiod,
-                        dirperiod=args.dirperiod)
-
+    # cerebro.addstrategy(TheStrategy,
+    #                     macd1=args.macd1, macd2=args.macd2,
+    #                     macdsig=args.macdsig,
+    #                     atrperiod=args.atrperiod,
+    #                     atrdist=args.atrdist,
+    #                     smaperiod=args.smaperiod,
+    #                     dirperiod=args.dirperiod)
+    
+    cerebro.addstrategy(BollingerBandsStrategy)
+    
+ 
     cerebro.addsizer(FixedPerc, perc=args.cashalloc)
 
     # Add TimeReturn Analyzers for self and the benchmark data
@@ -226,7 +358,7 @@ def parse_args(pargs=None):
                         help='Specific data to be read in')
 
     parser.add_argument('--fromdate', required=False,
-                        default='2005-01-01',
+                        default='2024-01-01',
                         help='Starting date in YYYY-MM-DD format')
 
     parser.add_argument('--todate', required=False,
