@@ -72,27 +72,26 @@ class BaseDataloader:
                 rs_np = None
                 try:
                     ready, tasks = ray.wait(tasks)
-                    rs_np = ray.get(ready)[0]
+                    base_columns, rs_np = ray.get(ready)[0]
+                    if not self.base_columns:
+                        self.base_columns = base_columns
                     single = pd.DataFrame.from_dict(rs_np)
                 except BaseException as e:
                     assert rs_np is not None, str(e)
                     shape = {k: v.shape for k, v in rs_np.items()}
-                    print(f" {stock}: shapes {shape} {e}")
+                    print(f" {p}: shapes {shape} {e}")
                 data.append(single)
         return pd.concat(data)
 
     def add_columns(self, data):
         from .feature.feature import Feature
-
-        if not self.base_columns:
-            self.base_columns = list(data.keys())
-
+        base_columns = list(data.keys())
         data = Feature(data=data)()
         labels = {}
         for gen in self.label_generators:
             labels.update({f"y_{k}": v for k, v in gen(data).items()})
         data.update(labels)
-        return data
+        return base_columns, data
     
     @property
     def labels(self):
@@ -113,7 +112,7 @@ class QlibDataloader(BaseDataloader):
 
     def get_stock_params(self):
         d = get_inst(self.path)
-        return list(d.items())[1000:1050]
+        return list(d.items())
 
     def get_all_days(self):
         days_path = os.path.join(self.path, "calendars", "day.txt")
@@ -152,7 +151,7 @@ class QlibDataloader(BaseDataloader):
 
         data["datetime"] = f_days
         data["instrument"] = np.full_like(f_days, stock)
-        data = self.add_columns(data)
+        base_columns, data = self.add_columns(data)
         
         if self.csi_ins:
             ind = np.zeros(len(f_days), dtype=bool)
@@ -169,7 +168,7 @@ class QlibDataloader(BaseDataloader):
                 k: v[ind] for k,v in data.items()
             }
 
-        return data
+        return base_columns, data
 
 class FtDataloader(BaseDataloader):
 

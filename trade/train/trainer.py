@@ -13,28 +13,9 @@ from trade.data.sampler import *
 from trade.model.reg_dnn import RegDNN
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
-
-import torchmetrics
-from torchmetrics import (
-    AUROC,
-    Accuracy,
-    PrecisionRecallCurve,
-    F1Score,
-    Precision,
-    Recall,
-)
-
-from torchmetrics.regression import (
-    PearsonCorrCoef,
-    SpearmanCorrCoef,
-    R2Score,
-    MeanAbsoluteError,
-    MeanAbsolutePercentageError,
-    MeanSquaredError,
-)
 import numpy as np
 import torch
-import ray
+
 
 
 def get_writer(date=None):
@@ -141,6 +122,7 @@ class Trainer:
                 self.writers[name].add_scalar(
                     self.metric_name(k, phase, False), v, epoch_idx
                 )
+                print(f"{i} {phase} {k} ==> {v}")
 
     def run(self, start=-1, epoch=3, save_name="model", save_last=True):
         def save(i):
@@ -174,9 +156,9 @@ class Trainer:
 
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None):
-    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    # loader = FtDataloader("tmp", [label_gen])
+    loader = FtDataloader("tmp", [label_gen])
     return {k: SamplersCpp(loader, v, csi) for k, v in date_ranges.items()}
 
 
@@ -243,7 +225,8 @@ if __name__ == "__main__":
                 samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
             # schedule = [8, 16, 64]
-            schedule = [128, 256, 512]
+            # schedule = [128, 256, 512]
+            schedule = [256]
             if saved_models:
                 models = saved_models[save_name][-1]["models"]
                 epoch_idx = saved_models[save_name][-1]["epoch_idx"]
@@ -263,4 +246,4 @@ if __name__ == "__main__":
 
             trainer = Trainer(8092 * 4, samplers, models)
 
-            trainer.run(epoch_idx, 50, save_name)
+            trainer.run(epoch_idx, 500, save_name)

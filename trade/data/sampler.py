@@ -8,14 +8,10 @@ import math
 
 class Sampler:
 
-    def __init__(self, loader ,day_range=None, csi=None):
+    def __init__(self, loader , day_range=None):
         print(f"loader features:{len(loader.features)}")
         self.use_label_weight = False
-        if csi:
-            features = loader.select_by_csi(csi)
-            print(f"after select {csi} features:{len(features)}")
-        else:
-            features = loader.features
+        features = loader.features
         if day_range:
             begin, end = day_range
             features = features[
@@ -119,8 +115,8 @@ class Sampler:
 
 class SamplersCpp(Sampler):
 
-    def __init__(self, loader, day_range=None, csi=None):
-        super(SamplersCpp, self).__init__(loader, day_range, csi)
+    def __init__(self, loader, day_range=None):
+        super(SamplersCpp, self).__init__(loader, day_range)
         self.data = {
             "x": self.features_np,
             **{
@@ -145,7 +141,7 @@ class SamplersCpp(Sampler):
             weight /= weight.sum()
             index = np.random.choice(index, n, replace=True, p=weight)
         elif phase == "valid":
-            batch_size = int(1e8)
+            batch_size = int(1e9)
         else:
             return super(SamplersCpp, self).iter(batch_size, phase, ratio)
         sampler = trade_cpp.NumpyDictSampler(self.data, batch_size, index.tolist())

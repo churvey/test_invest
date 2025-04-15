@@ -40,24 +40,38 @@ class Model:
 class CatModel(Model):
     def __init__(self):
         self.model = CatBoostRegressor(
-                        iterations=2,
-                          depth=2,
-                          learning_rate=1,
-                          eval_metric='Logloss',
-                          loss_function='RMSE')
+                        # iterations=200,
+                        #   depth=20,
+                        #   learning_rate=1,
+                            loss_function='MAE',
+                          eval_metric='MAE',
+                          )
 
     def train_step(self, data, step):
-        x = data["x"]
-        y = data["y_pred"]
+        x = data["x"].numpy()
+        y = data["y_pred"].numpy()
+        print("x shape", x.shape)
         train_pool = Pool(x, y)
-        self.model.fit(train_pool)
+        self.model.fit(train_pool, plot=True)
+       
         return {}
 
     def valid_step(self, data, step):
-        pass
+        x = data["x"].numpy()
+        y = data["y_pred"].numpy()
+        eval_pool = Pool(x, y)
+        m = self.model.eval_metrics(
+            eval_pool,
+            metrics = ["R2",'RMSE', 'MAE']
+        )
+        print("eval", m)
 
     def predict_step(self, data, step):
         x = data["x"]
+        y = data["y_pred"]
+        # print("x shape", x.shape)
         test_pool = Pool(x)
         preds = self.model.predict(test_pool)
+        # from sklearn.metrics import mean_absolute_error, mean_squared_error
+        # print(f"MAE: {mean_absolute_error(y, preds)}")
         return preds
