@@ -156,10 +156,10 @@ class Trainer:
 
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None):
-    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
     loader = FtDataloader("tmp", [label_gen])
-    return {k: SamplersCpp(loader, v, csi) for k, v in date_ranges.items()}
+    return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
 
 
 def get_label(data):
@@ -192,7 +192,7 @@ if __name__ == "__main__":
             l = data["close"].shape[0]
             return {
                 "pred": np.concatenate(
-                    [np.log(data["open"][2:] / data["close"][1:-1]), [float("nan")] * 2]
+                    [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
                 )[:l],
                 # "pred": np.concatenate(
                 #     [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
@@ -238,7 +238,7 @@ if __name__ == "__main__":
                 for i in schedule:
                     model_name = f"s2_{i}_{save_name}"
                     models[model_name] = model_class(
-                        len(samplers[stages[0]].feature_columns()),
+                        samplers[stages[0]].feature_columns(),
                         scheduler_step=i,
                     )
 

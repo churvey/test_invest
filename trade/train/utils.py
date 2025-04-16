@@ -51,3 +51,17 @@ def save_cache(path, obj, dumps=cloudpickle.dumps):
         with open(s, "wb") as f:
             f.write(cloudpickle.dumps(obj))
     return None
+
+
+def get_models(name, epoch = -1):
+    with Context() as ctx:
+        saved_models = from_cache(f"models.pkl")
+        if not saved_models:
+            return None
+        
+        models = saved_models[name][epoch]["models"]
+        return models
+    
+if __name__ == "__main__":
+    models = get_models("reg")
+    print(models)

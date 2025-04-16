@@ -71,6 +71,8 @@ class BollingerBandsStrategy(bt.Strategy):
         self.mb = self.bollinger.mid
         self.ub = self.bollinger.top
         self.lb = self.bollinger.bot
+        from trade.trader.indicator import ModelIndicator
+        self.model = ModelIndicator()
 
     def log(self, txt, dt=None, doprint=False):
         ''' Logging function fot this strategy'''
@@ -219,6 +221,8 @@ class TheStrategy(bt.Strategy):
             self.order = None  # indicate no order is pending
 
     def __init__(self):
+        from trade.trader.indicator import ModelIndicator
+        self.model = ModelIndicator()
         self.macd = bt.indicators.MACD(self.data,
                                        period_me1=self.p.macd1,
                                        period_me2=self.p.macd2,
@@ -313,7 +317,12 @@ def runstrat(args=None):
     cerebro.addstrategy(BollingerBandsStrategy)
     
  
-    cerebro.addsizer(FixedPerc, perc=args.cashalloc)
+    # cerebro.addsizer(FixedPerc, perc=args.cashalloc)
+    cerebro.addsizer(bt.sizers.PercentSizerInt, percents=95)
+    
+    cerebro.broker.setcommission(commission=0.0001)
+    cerebro.addanalyzer(bt.analyzers.PyFolio, _name="PyFolio")
+
 
     # Add TimeReturn Analyzers for self and the benchmark data
     cerebro.addanalyzer(bt.analyzers.TimeReturn, _name='alltime_roi',

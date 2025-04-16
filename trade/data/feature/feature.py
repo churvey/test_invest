@@ -57,24 +57,26 @@ class Feature:
 
     # 5、北交所：以8开头
 
-    def limit_flag(self, data):
-        limit = 0.099
-        if data["instrument"][0][2:5] in ["300", "688"]:
-            limit = 0.199
-        if data["instrument"][0][2:3] in ["8"]:
-            limit = 0.299
+    # def limit_flag(self, data):
+    #     if "instrument" not in data:
+    #         return None
+    #     limit = 0.099
+    #     if data["instrument"][0][2:5] in ["300", "688"]:
+    #         limit = 0.199
+    #     if data["instrument"][0][2:3] in ["8"]:
+    #         limit = 0.299
 
-        rs = np.zeros(data["close"].shape)
+    #     rs = np.zeros(data["close"].shape)
 
-        up_flag = (data["change"] >= limit) & (data["high"] - data["close"] < 1e-5)
+    #     up_flag = (data["change"] >= limit) & (data["high"] - data["close"] < 1e-5)
 
-        rs[up_flag] = 1
+    #     rs[up_flag] = 1
 
-        low_flag = (data["change"] <= -limit) & (data["close"] - data["low"] < 1e-5)
+    #     low_flag = (data["change"] <= -limit) & (data["close"] - data["low"] < 1e-5)
 
-        rs[low_flag] = 2
+    #     rs[low_flag] = 2
 
-        return rs
+    #     return rs
 
     def kmid(self, data):
         return (data["close"] - data["open"]) / data["open"]

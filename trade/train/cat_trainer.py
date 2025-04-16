@@ -11,9 +11,7 @@ import datetime
 from trade.data.loader import QlibDataloader,FtDataloader
 from catboost import CatBoostRegressor, Pool
 from trade.data.sampler import *
-from trade.model.reg_dnn import RegDNN
-from trade.model.cls_dnn import ClsDNN
-from trade.model.model import CatModel
+from trade.model.reg_cat import RegCat
 from trade.train.utils import *
 import numpy as np
 import torch
@@ -75,12 +73,12 @@ class CatTrainer:
         if "train" in self.samplers:
             for i in range(start + 1, epoch):
                 for name, m in self.models.items():
-                    m.fit(
+                    m.model.fit(
                         get_data("train"),
                         # eval_set = get_data("eval"),
                         # log_cout=TensorBoardLogger(f"./metric/{name}"),
                     )
-                    importance = m.get_feature_importance().tolist()
+                    importance = m.model.get_feature_importance().tolist()
                     feature_columns = self.samplers["train"].feature_columns()
                     importance = list(zip(importance, feature_columns))
                     importance= sorted(importance,
@@ -99,7 +97,7 @@ class CatTrainer:
             yps = []
             for i, data in enumerate(iter):
                 for name, m in self.models.items():
-                    pred = m.predict(
+                    pred = m.model.predict(
                         data["x"]
                     )
                     y = data['y_pred'].reshape([-1])
@@ -114,7 +112,7 @@ def get_samplers_cpp(label_gen, date_ranges, csi=None):
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
     loader = FtDataloader("tmp", [label_gen])
-    return {k: SamplersCpp(loader, v, csi) for k, v in date_ranges.items()}
+    return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
 
 if __name__ == "__main__":
 
@@ -152,7 +150,7 @@ if __name__ == "__main__":
         saved_models = None
         # for save_name in ["cls", "reg"]:
         # for save_name in ["reg", "cls"]:
-        for save_name in ["reg"]:
+        for save_name in ["cat"]:
             for k in samplers.keys():
                 samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
@@ -163,15 +161,13 @@ if __name__ == "__main__":
                 epoch_idx = saved_models[save_name][-1]["epoch_idx"]
             else:
                 models = {}
-
-                model_class = CatModel
-
                 # for i in schedule:
-                model_name = f"s2_{save_name}"
-                models[model_name] = CatBoostRegressor(
+                model_name = f"s_{save_name}"
+                models[model_name] = RegCat(
                         #   iterations=200,
                         #   depth=20,
                         #   learning_rate=1,
+                            samplers[stages[0]].feature_columns(),
                             loss_function='MAE',
                             eval_metric='MAE',
                             

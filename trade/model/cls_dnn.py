@@ -48,10 +48,11 @@ class FocalBCEWithLogitsLoss(nn.Module):
 class ClsDNN(Model, nn.Module):
 
     def __init__(
-        self, input_dim, output_dim=3, device="cuda", weight=None, scheduler_step=20
+        self, features, output_dim=3, device="cuda", weight=None, scheduler_step=20
     ):
-        super(ClsDNN, self).__init__()
-        self.model = Net(input_dim, output_dim)
+        nn.Module.__init__(self)
+        Model.__init__(self, features)
+        self.model = Net(len(features), output_dim)
         self.output_dim = output_dim
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
@@ -96,7 +97,7 @@ class ClsDNN(Model, nn.Module):
         y_cls = data["y_cls"].reshape([-1]).to(torch.int64)
         y = torch.nn.functional.one_hot(y_cls, self.output_dim).to(torch.float32)
         self.optimizer.zero_grad()
-        y_p = self.model.forward(x)
+        y_p = self.forward(x)
         loss = self.loss_fn(y_p, y)
         if is_train:
             loss.backward()
@@ -109,6 +110,7 @@ class ClsDNN(Model, nn.Module):
             rs = y_p, y, loss
 
         m = {"loss": rs[-1]}
+        
         for k, v in self.metrics.items():
             value = v(y_p.detach(), y_cls.detach())
             if value.numel() > 1:
@@ -141,3 +143,9 @@ class ClsDNN(Model, nn.Module):
 
     def predict_step(self, data, step_idx):
         return self.step(data, step_idx)
+
+    def forward(self, *args, **kwargs):
+        return self.model.forward(*args, **kwargs)
+  
+    def to_device(self, v):
+        return torch.asarray(v, self.device)

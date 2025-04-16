@@ -10,6 +10,8 @@ import datetime
 
 from catboost import CatBoostRegressor, Pool
 
+from trade.data.feature.feature import Feature
+
 from trade.model.zoo import Net
 
 def mse(pred, target, weight = 1.0):
@@ -21,8 +23,8 @@ def mse(pred, target, weight = 1.0):
 
 class Model:
 
-    def __init__(self):
-        super(Model, self).__init__()
+    def __init__(self, features):
+        self.features = features
 
     def train_step(self, data, step):
         pass
@@ -33,45 +35,19 @@ class Model:
     def predict_step(self, data, step):
         pass
 
-    def forward(*args, **kvargs):
+    def forward(self, *args, **kwargs):
         pass
-
-
-class CatModel(Model):
-    def __init__(self):
-        self.model = CatBoostRegressor(
-                        # iterations=200,
-                        #   depth=20,
-                        #   learning_rate=1,
-                            loss_function='MAE',
-                          eval_metric='MAE',
-                          )
-
-    def train_step(self, data, step):
-        x = data["x"].numpy()
-        y = data["y_pred"].numpy()
-        print("x shape", x.shape)
-        train_pool = Pool(x, y)
-        self.model.fit(train_pool, plot=True)
-       
-        return {}
-
-    def valid_step(self, data, step):
-        x = data["x"].numpy()
-        y = data["y_pred"].numpy()
-        eval_pool = Pool(x, y)
-        m = self.model.eval_metrics(
-            eval_pool,
-            metrics = ["R2",'RMSE', 'MAE']
-        )
-        print("eval", m)
-
-    def predict_step(self, data, step):
-        x = data["x"]
-        y = data["y_pred"]
-        # print("x shape", x.shape)
-        test_pool = Pool(x)
-        preds = self.model.predict(test_pool)
-        # from sklearn.metrics import mean_absolute_error, mean_squared_error
-        # print(f"MAE: {mean_absolute_error(y, preds)}")
-        return preds
+    
+    def to_device(self, data):
+        return data
+    
+    def predict(self, data):
+        data = Feature(data)()
+        data = np.concatenate(
+            [data[p].reshape([-1, 1])  for p in self.features], axis = -1
+        ).astype("float32")
+        # print(data.shape)
+        data = self.to_device(data)
+        rs = self.forward(data).cpu().detach().numpy()
+        # print(rs)
+        return rs

@@ -35,9 +35,10 @@ from torchmetrics.regression import (
 
 class RegDNN(Model, nn.Module):
 
-    def __init__(self, input_dim, output_dim=1, device="cuda", scheduler_step=20):
-        super(RegDNN, self).__init__()
-        self.model = Net(input_dim, output_dim)
+    def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
+        nn.Module.__init__(self)
+        Model.__init__(self, features)
+        self.model = Net(len(self.features), output_dim)
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
         )
@@ -58,12 +59,15 @@ class RegDNN(Model, nn.Module):
         self.device = device
         self.metrics = {"pcorr": PearsonCorrCoef().to(self.device)}
         self.scheduler_step = scheduler_step
+        
+    def forward(self, *args, **kwargs):
+        return self.model.forward(*args, **kwargs)
 
     def step(self, data, step_idx, is_train=False):
         x = data["x"]
         y = data["y_pred"]
         self.optimizer.zero_grad()
-        y_p = self.model.forward(x)
+        y_p = self.forward(x)
         loss = self.loss_fn(y_p, y)
         loss_w = None
         if is_train:
@@ -105,3 +109,6 @@ class RegDNN(Model, nn.Module):
 
     def predict_step(self, data, step_idx):
         return self.step(data, step_idx)
+  
+    def to_device(self, v):
+        return torch.asarray(v).to(self.device)
