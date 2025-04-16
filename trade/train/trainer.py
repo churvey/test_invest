@@ -156,9 +156,9 @@ class Trainer:
 
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None):
-    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
+    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    loader = FtDataloader("tmp", [label_gen])
+    # loader = FtDataloader("tmp", [label_gen])
     return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
 
 
@@ -191,12 +191,12 @@ if __name__ == "__main__":
         def label_gen(data):
             l = data["close"].shape[0]
             return {
-                "pred": np.concatenate(
-                    [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
-                )[:l],
                 # "pred": np.concatenate(
-                #     [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
+                #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
                 # )[:l],
+                "pred": np.concatenate(
+                    [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
+                )[:l],
                 # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
                 #  "cls": get_label(data),
             }
@@ -246,4 +246,4 @@ if __name__ == "__main__":
 
             trainer = Trainer(8092 * 4, samplers, models)
 
-            trainer.run(epoch_idx, 500, save_name)
+            trainer.run(epoch_idx, 50, save_name)

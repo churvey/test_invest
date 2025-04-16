@@ -19,7 +19,7 @@ class ModelIndicator(Indicator):
     alias = ('ModelIndicator',)
 
     lines = ('next_open',"inc")
-    params = (('period', 61),)
+    params = (('period', 62),)
 
     plotinfo = dict(subplot=False)
     plotlines = dict(

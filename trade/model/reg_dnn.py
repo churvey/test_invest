@@ -54,8 +54,8 @@ class RegDNN(Model, nn.Module):
             min_lr=0.00001,
             eps=1e-08,
         )
-        # self.loss_fn = mse
-        self.loss_fn = nn.L1Loss()
+        self.loss_fn = mse
+        # self.loss_fn = nn.L1Loss()
         self.device = device
         self.metrics = {"pcorr": PearsonCorrCoef().to(self.device)}
         self.scheduler_step = scheduler_step
@@ -94,6 +94,10 @@ class RegDNN(Model, nn.Module):
             m["w_min"] = data["w"].min().detach()
         for k, v in self.metrics.items():
             m[k] = v(rs[0], rs[1])
+            m["y"] = y.abs().mean().detach()
+            m["yp"] = y_p.abs().mean().detach()
+            m["y_q85"] = torch.quantile(y.abs(), 0.85).detach()
+            m["yp_q85"] = torch.quantile(y_p.abs(), 0.85).detach()
 
         return *rs, m
 

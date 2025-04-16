@@ -86,7 +86,7 @@ class BollingerBandsStrategy(bt.Strategy):
     def notify_trade(self, trade):
         if not trade.isclosed:
             return
-        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' % (trade.pnl, trade.pnlcomm))
+        self.log('OPERATION PROFIT, GROSS %.3f, NET %.3f' % (trade.pnl, trade.pnlcomm))
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -98,7 +98,7 @@ class BollingerBandsStrategy(bt.Strategy):
         if order.status in [order.Completed]:                # order.Partial
             if order.isbuy():
                 self.log(
-                    'BUY EXECUTED, Price: %.2f, Size: %.0f, Cost: %.2f, Comm %.2f, RemSize: %.0f, RemCash: %.2f' %
+                    'BUY EXECUTED, Price: %.3f, Size: %.0f, Cost: %.3f, Comm %.3f, RemSize: %.0f, RemCash: %.3f' %
                     (order.executed.price,
                      order.executed.size,
                      order.executed.value,
@@ -109,7 +109,7 @@ class BollingerBandsStrategy(bt.Strategy):
                 self.buyprice = order.executed.price
                 self.buycomm = order.executed.comm
             else:  # Sell
-                self.log('SELL EXECUTED, Price: %.2f, Size: %.0f, Cost: %.2f, Comm %.2f, RemSize: %.0f, RemCash: %.2f' %
+                self.log('SELL EXECUTED, Price: %.3f, Size: %.0f, Cost: %.3f, Comm %.3f, RemSize: %.0f, RemCash: %.3f' %
                          (order.executed.price,
                           order.executed.size,
                           order.executed.value,
@@ -125,60 +125,85 @@ class BollingerBandsStrategy(bt.Strategy):
 
     def next(self):
         # Simply log the closing price of the series from the reference
-        # self.log('Close, %.2f' % self.data.close[0])
+        # self.log('Close, %.3f' % self.data.close[0])
         if self.order:
             return
-        # need at least two bollinger records
-        if np.count_nonzero(~np.isnan(self.mb.get(0, len(self.mb)))) == 1:
-            return
-
-        # open long position; price backs up from below lower band
-        if self.position.size <= 0 \
-                and self.dataclose[0] > self.lb[0] \
-                and self.dataclose[-1] < self.lb[-1]:
+        
+        # print("inc", self.model.inc[0])
+        if self.model.inc[0] >= 1.0001:
+            # print
+            self.log('inc %.5f ' %  self.model.inc[0])
+        if self.position.size == 0 and self.model.inc[0] >= 1.0001:
             self.order = self.buy()
-            self.log('BUY ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-LB: %.2f, LB: %.2f, Size: %.2f' %
+            self.log('BUY ORDER SENT, Pre-Price: %.3f, Price: %.3f, open %.3f Pre-LB: %.3f, LB: %.3f, Size: %.3f' %
                      (self.dataclose[-1],
                       self.dataclose[0],
+                      self.data.open[0],
                       self.lb[-1],
                       self.lb[0],
                       self.getsizing(isbuy=True)))
-        # open short position; price backs down from above upper band
-        elif self.position.size >=0 \
-                and self.dataclose[0] < self.ub[0] \
-                and self.dataclose[-1] > self.ub[-1]:
-            self.order = self.sell()
-            self.log('SELL ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-UB: %.2f, UB: %.2f, Size: %.2f' %
+        elif self.position.size > 0:
+            # self.order = self.sell(size = self.position.size, price = self.data.open[0])
+            self.order = self.close()
+            self.log('SELL ORDER SENT, Pre-Price: %.3f, Price: %.3f, open %.3f Pre-UB: %.3f, UB: %.3f, Size: %.3f' %
                      (self.dataclose[-1],
                       self.dataclose[0],
+                      self.data.open[0],
                       self.ub[-1],
                       self.ub[0],
                       self.getsizing(isbuy=False)))
-        # close short position
-        elif self.dataclose[0] < self.mb[0] and self.position.size < 0:
-            self.order = self.buy()
-            self.log('BUY ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-MB: %.2f, MB: %.2f, Size: %.2f' %
-                     (self.dataclose[-1],
-                      self.dataclose[0],
-                      self.mb[-1],
-                      self.mb[0],
-                      self.getsizing(isbuy=True)))
-        # close long position
-        elif self.dataclose[0] > self.mb[0] and self.position.size > 0:
-            self.order = self.sell()
-            self.log('SELL ORDER SENT, Pre-Price: %.2f, Price: %.2f, Pre-MB: %.2f, MB: %.2f, Size: %.2f' %
-                     (self.dataclose[-1],
-                      self.dataclose[0],
-                      self.mb[-1],
-                      self.mb[0],
-                      self.getsizing(isbuy=False)))
+            
+        # need at least two bollinger records
+        # if np.count_nonzero(~np.isnan(self.mb.get(0, len(self.mb)))) == 1:
+        #     return
+
+        # # open long position; price backs up from below lower band
+        # if self.position.size <= 0 \
+        #         and self.dataclose[0] > self.lb[0] \
+        #         and self.dataclose[-1] < self.lb[-1]:
+        #     self.order = self.buy()
+        #     self.log('BUY ORDER SENT, Pre-Price: %.3f, Price: %.3f, Pre-LB: %.3f, LB: %.3f, Size: %.3f' %
+        #              (self.dataclose[-1],
+        #               self.dataclose[0],
+        #               self.lb[-1],
+        #               self.lb[0],
+        #               self.getsizing(isbuy=True)))
+        # # open short position; price backs down from above upper band
+        # elif self.position.size >=0 \
+        #         and self.dataclose[0] < self.ub[0] \
+        #         and self.dataclose[-1] > self.ub[-1]:
+        #     self.order = self.sell()
+        #     self.log('SELL ORDER SENT, Pre-Price: %.3f, Price: %.3f, Pre-UB: %.3f, UB: %.3f, Size: %.3f' %
+        #              (self.dataclose[-1],
+        #               self.dataclose[0],
+        #               self.ub[-1],
+        #               self.ub[0],
+        #               self.getsizing(isbuy=False)))
+        # # close short position
+        # elif self.dataclose[0] < self.mb[0] and self.position.size < 0:
+        #     self.order = self.buy()
+        #     self.log('BUY ORDER SENT, Pre-Price: %.3f, Price: %.3f, Pre-MB: %.3f, MB: %.3f, Size: %.3f' %
+        #              (self.dataclose[-1],
+        #               self.dataclose[0],
+        #               self.mb[-1],
+        #               self.mb[0],
+        #               self.getsizing(isbuy=True)))
+        # # close long position
+        # elif self.dataclose[0] > self.mb[0] and self.position.size > 0:
+        #     self.order = self.sell()
+        #     self.log('SELL ORDER SENT, Pre-Price: %.3f, Price: %.3f, Pre-MB: %.3f, MB: %.3f, Size: %.3f' %
+        #              (self.dataclose[-1],
+        #               self.dataclose[0],
+        #               self.mb[-1],
+        #               self.mb[0],
+        #               self.getsizing(isbuy=False)))
 
     def stop(self):
         # calculate the actual returns
         print(self.analyzers)
         roi = (self.broker.get_value() / self.val_start) - 1.0
         self.log('ROI:        {:.2f}%'.format(100.0 * roi))
-        self.log('(Bollinger params (%2d, %2d)) Ending Value %.2f' %
+        self.log('(Bollinger params (%2d, %2d)) Ending Value %.3f' %
                  (self.params.n, self.params.ndev, self.broker.getvalue()), doprint=True)
 
 
@@ -267,6 +292,9 @@ def runstrat(args=None):
     args = parse_args(args)
 
     cerebro = bt.Cerebro()
+    
+    # cerebro.broker.set_coc(True) 
+    
     cerebro.broker.set_cash(args.cash)
     comminfo = bt.commissions.CommInfo_Stocks_Perc(commission=args.commperc,
                                                    percabs=True)
@@ -320,8 +348,8 @@ def runstrat(args=None):
     # cerebro.addsizer(FixedPerc, perc=args.cashalloc)
     cerebro.addsizer(bt.sizers.PercentSizerInt, percents=95)
     
-    cerebro.broker.setcommission(commission=0.0001)
-    cerebro.addanalyzer(bt.analyzers.PyFolio, _name="PyFolio")
+    cerebro.broker.setcommission(commission=0.002)
+    # cerebro.addanalyzer(bt.analyzers.PyFolio, _name="PyFolio")
 
 
     # Add TimeReturn Analyzers for self and the benchmark data
