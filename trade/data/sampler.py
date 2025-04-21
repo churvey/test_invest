@@ -10,7 +10,7 @@ class Sampler:
 
     def __init__(self, loader , day_range=None):
         print(f"loader features:{len(loader.features)}")
-        self.use_label_weight = False
+        self.label_name = "y_pred"
         features = loader.features
         if day_range:
             begin, end = day_range
@@ -43,17 +43,20 @@ class Sampler:
     def feature_columns(self):
         return self._feature_columns
 
-    def label_weight(self, label="y_cls"):
-        label = self.label_np[:, self.labels.index(label)]
-        label_unique = np.sort(np.unique(label))
-        weight = {
-            l: math.sqrt(1 - (label == l).sum() / self.label_np.shape[0])
-            for l in label_unique
-        }
-        weight_s = np.zeros_like(label)
-        for l in label_unique:
-            weight_s[label == l] = weight[l]
-        return weight_s
+    def label_weight(self):
+        if "cls" in self.label_name:
+            label = self.label_np[:, self.labels.index(label)]
+            label_unique = np.sort(np.unique(label))
+            weight = {
+                l: math.sqrt(1 - (label == l).sum() / self.label_np.shape[0])
+                for l in label_unique
+            }
+            weight_s = np.zeros_like(label)
+            for l in label_unique:
+                weight_s[label == l] = weight[l]
+            return weight_s
+        else:
+            return (label * label)
 
     def weight(self, features):
         w = np.arange(1, len(self.days) + 1, dtype="float64")

@@ -43,8 +43,9 @@ class Summarizer:
 
 class BaseDataloader:
 
-    def __init__(self, path, label_generators=[]):
+    def __init__(self, path, label_generators=[], extend_feature = True):
         self.path = path
+        self.extend_feature = extend_feature
         self.label_generators = label_generators
         self.indices = ["instrument", "datetime"]
         self.base_columns = []
@@ -84,9 +85,10 @@ class BaseDataloader:
         return pd.concat(data)
 
     def add_columns(self, data):
-        from .feature.feature import Feature
         base_columns = list(data.keys())
-        data = Feature(data=data)()
+        if self.extend_feature:
+            from .feature.feature import Feature
+            data = Feature(data=data)()
         labels = {}
         for gen in self.label_generators:
             labels.update({f"y_{k}": v for k, v in gen(data).items()})
@@ -100,8 +102,8 @@ class BaseDataloader:
 
 class QlibDataloader(BaseDataloader):
 
-    def __init__(self, path, label_generators=[], csi = None):
-        super(QlibDataloader, self).__init__(path, label_generators)
+    def __init__(self, path, label_generators=[], csi = None, extend_feature = True):
+        super(QlibDataloader, self).__init__(path, label_generators, extend_feature)
         self.csi = csi
         self.csi_ins = {}
         if self.csi:
@@ -112,6 +114,12 @@ class QlibDataloader(BaseDataloader):
 
     def get_stock_params(self):
         d = get_inst(self.path)
+        # if True:
+        #     rs = list(d.items())
+        #     index = np.arange(len(rs))
+        #     index =  np.random.choice(index, 10, replace=False)
+        #     return [rs[i] for i in index]
+        #     # return [:50]
         return list(d.items())
 
     def get_all_days(self):
@@ -172,8 +180,8 @@ class QlibDataloader(BaseDataloader):
 
 class FtDataloader(BaseDataloader):
 
-    def __init__(self, path, label_generators=[]):
-        super(FtDataloader, self).__init__(path, label_generators)
+    def __init__(self, path, label_generators=[], extend_feature = True):
+        super(FtDataloader, self).__init__(path, label_generators, extend_feature)
         self.features = self.get_features()
         self.days = self.features["datetime"].unique()
     
