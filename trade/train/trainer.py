@@ -8,14 +8,13 @@ import cloudpickle
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
-from trade.data.loader import QlibDataloader,FtDataloader
+from trade.data.loader import QlibDataloader, FtDataloader
 from trade.data.sampler import *
 from trade.model.reg_dnn import RegDNN
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
 import numpy as np
 import torch
-
 
 
 def get_writer(date=None):
@@ -82,11 +81,12 @@ class Trainer:
                 self.run_streams[name].synchronize()
                 last_metric = last_metrics[name]
                 for k, v in last_metric.items():
-                    self.writers[name].add_scalar(
-                        self.metric_name(k, phase),
-                        v,
-                        step,
-                    )
+                    if step >= 100:
+                        self.writers[name].add_scalar(
+                            self.metric_name(k, phase),
+                            v,
+                            step,
+                        )
 
         i = 0
         for i, data_i in enumerate(batch_iter):
@@ -190,13 +190,30 @@ if __name__ == "__main__":
 
         def label_gen(data):
             l = data["close"].shape[0]
+            pred = np.concatenate(
+                    [
+                        (data["open"][1:] / data["close"][:-1] - 1),
+                        [float("nan")] * 1,
+                    ]
+            )[:l]
+            
+            valid = (np.abs(pred) <= 0.3)
+            pred = pred[valid]
+            
+            for k in data.keys():
+                data[k] = data[k][valid]            
+            
             return {
                 # "pred": np.concatenate(
                 #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
                 # )[:l],
-                "pred": np.concatenate(
-                    [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
-                )[:l],
+                "pred": pred,
+                # "pred": np.concatenate(
+                #     [np.log(data["open"] / data["close"]), []]
+                # )[:l],
+                # "pred": np.concatenate(
+                #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
+                # )[:l],
                 # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
                 #  "cls": get_label(data),
             }
@@ -221,12 +238,12 @@ if __name__ == "__main__":
         # for save_name in ["cls", "reg"]:
         # for save_name in ["reg", "cls"]:
         for save_name in ["reg"]:
-            for k in samplers.keys():
-                samplers[k].use_label_weight = save_name == "cls"
+            # for k in samplers.keys():
+            #     samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
-            # schedule = [8, 16, 64]
+            schedule = [32]
             # schedule = [128, 256, 512]
-            schedule = [256]
+            # schedule = [256]
             if saved_models:
                 models = saved_models[save_name][-1]["models"]
                 epoch_idx = saved_models[save_name][-1]["epoch_idx"]
@@ -236,7 +253,7 @@ if __name__ == "__main__":
                 model_class = RegDNN if save_name == "reg" else ClsDNN
 
                 for i in schedule:
-                    model_name = f"s2_{i}_{save_name}"
+                    model_name = f"s_{i}_{save_name}"
                     models[model_name] = model_class(
                         samplers[stages[0]].feature_columns(),
                         scheduler_step=i,
@@ -244,6 +261,7 @@ if __name__ == "__main__":
 
                 epoch_idx = -1
 
-            trainer = Trainer(8092 * 4, samplers, models)
+            # trainer = Trainer(8092 * 4, samplers, models)
+            trainer = Trainer(8092, samplers, models)
 
-            trainer.run(epoch_idx, 50, save_name)
+            trainer.run(epoch_idx, 10, save_name)

@@ -123,6 +123,10 @@ class BollingerBandsStrategy(bt.Strategy):
 
         self.order = None
 
+    def next_open(self):
+        if self.position.size > 0:
+            self.order = self.sell(size = self.position.size)
+
     def next(self):
         # Simply log the closing price of the series from the reference
         # self.log('Close, %.3f' % self.data.close[0])
@@ -130,10 +134,10 @@ class BollingerBandsStrategy(bt.Strategy):
             return
         
         # print("inc", self.model.inc[0])
-        if self.model.inc[0] >= 1.0001:
+        if self.model.inc[0] >= 0.001:
             # print
             self.log('inc %.5f ' %  self.model.inc[0])
-        if self.position.size == 0 and self.model.inc[0] >= 1.0001:
+        if self.position.size == 0 and self.model.inc[0] >= 0.001:
             self.order = self.buy()
             self.log('BUY ORDER SENT, Pre-Price: %.3f, Price: %.3f, open %.3f Pre-LB: %.3f, LB: %.3f, Size: %.3f' %
                      (self.dataclose[-1],
@@ -142,16 +146,16 @@ class BollingerBandsStrategy(bt.Strategy):
                       self.lb[-1],
                       self.lb[0],
                       self.getsizing(isbuy=True)))
-        elif self.position.size > 0:
-            # self.order = self.sell(size = self.position.size, price = self.data.open[0])
-            self.order = self.close()
-            self.log('SELL ORDER SENT, Pre-Price: %.3f, Price: %.3f, open %.3f Pre-UB: %.3f, UB: %.3f, Size: %.3f' %
-                     (self.dataclose[-1],
-                      self.dataclose[0],
-                      self.data.open[0],
-                      self.ub[-1],
-                      self.ub[0],
-                      self.getsizing(isbuy=False)))
+        # elif self.position.size > 0:
+        #     # self.order = self.sell(size = self.position.size, price = self.data.open[0])
+        #     self.order = self.close()
+        #     self.log('SELL ORDER SENT, Pre-Price: %.3f, Price: %.3f, open %.3f Pre-UB: %.3f, UB: %.3f, Size: %.3f' %
+        #              (self.dataclose[-1],
+        #               self.dataclose[0],
+        #               self.data.open[0],
+        #               self.ub[-1],
+        #               self.ub[0],
+        #               self.getsizing(isbuy=False)))
             
         # need at least two bollinger records
         # if np.count_nonzero(~np.isnan(self.mb.get(0, len(self.mb)))) == 1:
@@ -291,9 +295,9 @@ class TheStrategy(bt.Strategy):
 def runstrat(args=None):
     args = parse_args(args)
 
-    cerebro = bt.Cerebro()
+    cerebro = bt.Cerebro(cheat_on_open=True)
     
-    # cerebro.broker.set_coc(True) 
+    cerebro.broker.set_coc(True) 
     
     cerebro.broker.set_cash(args.cash)
     comminfo = bt.commissions.CommInfo_Stocks_Perc(commission=args.commperc,
@@ -349,7 +353,7 @@ def runstrat(args=None):
     cerebro.addsizer(bt.sizers.PercentSizerInt, percents=95)
     
     cerebro.broker.setcommission(commission=0.002)
-    # cerebro.addanalyzer(bt.analyzers.PyFolio, _name="PyFolio")
+    cerebro.addanalyzer(bt.analyzers.PyFolio, _name="PyFolio")
 
 
     # Add TimeReturn Analyzers for self and the benchmark data

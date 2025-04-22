@@ -44,8 +44,9 @@ class Sampler:
         return self._feature_columns
 
     def label_weight(self):
+        label = self.label_np[:, self.labels.index(self.label_name)]
         if "cls" in self.label_name:
-            label = self.label_np[:, self.labels.index(label)]
+            # label = self.label_np[:, self.labels.index(label)]
             label_unique = np.sort(np.unique(label))
             weight = {
                 l: math.sqrt(1 - (label == l).sum() / self.label_np.shape[0])
@@ -56,6 +57,7 @@ class Sampler:
                 weight_s[label == l] = weight[l]
             return weight_s
         else:
+            print(label)
             return (label * label)
 
     def weight(self, features):
@@ -139,12 +141,12 @@ class SamplersCpp(Sampler):
         if phase == "train":
             n = int(index.shape[0] * ratio)
             weight = self.w.astype("float64")
-            if self.use_label_weight:
-                weight *= self.label_weight()
+            weight *= self.label_weight()
             weight /= weight.sum()
             index = np.random.choice(index, n, replace=True, p=weight)
         elif phase == "valid":
-            batch_size = int(1e9)
+            batch_size = int(8096 * 16)
+            pass
         else:
             return super(SamplersCpp, self).iter(batch_size, phase, ratio)
         sampler = trade_cpp.NumpyDictSampler(self.data, batch_size, index.tolist())

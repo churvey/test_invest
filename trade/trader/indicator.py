@@ -77,7 +77,7 @@ class ModelIndicator(Indicator):
         # print(self.data.close[0], )
         # print(data)
         data["change"] =  np.concatenate([[float("nan")], data["close"][1:] / data["close"][:-1]])
-        inc = np.exp(model.predict(data).reshape([-1]))
+        inc = model.predict(data).reshape([-1]) / 100
         next_open = data["close"] * inc
         self.lines.next_open[0] = next_open[-1]
         self.lines.inc[0] = inc[-1]
