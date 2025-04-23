@@ -13,37 +13,81 @@ from trade.data.loader import QlibDataloader,FtDataloader
 # from trade.data.sampler import *
 # from trade.model.reg_dnn import RegDNN
 # from trade.model.cls_dnn import ClsDNN
-# from trade.train.utils import *
+from trade.train.utils import *
 import numpy as np
 import torch
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy.stats import norm
 
 
 def label_gen(data):
     l = data["close"].shape[0]
+    pred = np.concatenate(
+            [
+                (data["open"][1:] / data["close"][:-1] - 1),
+                [float("nan")] * 1,
+            ]
+    )[:l]
+    
+    valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
+    pred = pred[valid]
+    
+    for k in data.keys():
+        data[k] = data[k][valid]            
+    
     return {
-        "pred": np.concatenate(
-            [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
-        )[:l],
         # "pred": np.concatenate(
-        #     [np.abs(np.log(data["open"][1:] / data["close"][:-1])), [float("nan")] * 1]
+        #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
+        # )[:l],
+        "pred": pred,
+        # "pred": np.concatenate(
+        #     [np.log(data["open"] / data["close"]), []]
+        # )[:l],
+        # "pred": np.concatenate(
+        #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
         # )[:l],
         # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
         #  "cls": get_label(data),
     }
 
 def plot_label(label_gen):
-    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], extend_feature=False)
     data = loader.features.dropna()["y_pred"].to_numpy()
+    
+    
+    weight = np.abs(data)
+    bins = 200
+    
+    bucket = np.arange(bins) / bins
+
+    def get_value(w):
+        for i in range(len(bucket)):
+            if bucket[i] > w:
+                return bucket[i]
+        return 1
+    
+    weight = np.array([
+        get_value(w) for w in weight
+    ])
+    
+    weight /= weight.sum()
+    data_resample = np.random.choice(data, len(data), replace=True, p=weight)
+    
+    weight2 = data * data
+    weight2 /= weight2.sum()
+    data_resample2 = np.random.choice(data, len(data), replace=True, p=weight2)
     
     mu = np.mean(data)
     sigma = np.std(data)
     # l = loader.features["y_pred"] < 0
     # print(loader.features["y_pred"][l])
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    from scipy.stats import norm
+
     plt.figure(figsize=(10, 6))
-    plt.hist(data, bins=100, density=True, alpha=0.6, color='blue', edgecolor='black', label='Data Histogram')
+    # plt.hist(data, bins=100, density=True, alpha=0.6, color='blue', edgecolor='black', label='Data Histogram')
+    plt.hist(data_resample, bins=bins, density=True, alpha=0.6, label='Data Resample')
+    # plt.hist(data_resample2, bins=100, density=True, alpha=0.6, label='Data Resample2')
+    
     import seaborn as sns
     sns.kdeplot(data, color='red', linewidth=2, label='Data KDE')
 
@@ -60,9 +104,109 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
+def plot_pred():
+    with Context() as ctx:
+        pred = from_cache(f"predict.pkl")
+        
+        top_n = pred.groupby('datetime').apply(
+            lambda x: x.sort_values('y_p', ascending=False).head(5)
+        ).reset_index(drop=True)
+        labels_t = top_n["y"].to_numpy()
+        preds_t = top_n["y_p"].to_numpy()
+        
+        d_sig = np.sum(labels_t * preds_t >0)
+        print(
+            "d_sig top_n", d_sig / len(labels_t)
+        )
+        
+        
+        labels = pred["y"].to_numpy()
+        preds = pred["y_p"].to_numpy()
+        np.random.seed(42)
+
+        # mae = np.abs(labels-preds)
+        diff = labels-preds
+        print(
+            "mean", np.mean(diff)
+        )
+        d_sig = np.sum(labels * preds >0)
+        print(
+            "d_sig", d_sig / len(labels)
+        )
+        
+        q_rs = []
+        for q in [0.75, 0.85, 0.95, 0.99, 0.995]:
+            q_v = np.quantile(preds, q)
+            select = preds >= q_v
+            d_sig = np.sum(labels[select] * preds[select] > 0)
+            d_sig_n = np.sum(labels[select] * preds[select] < 0)
+            print(
+                f"d_sig:{d_sig / len(labels[select])} {d_sig_n/ len(labels[select])} q:{q}, q_v{q_v}"
+            )
+            q_rs.append(
+                [labels[select] , preds[select]]
+            )
+        
+        
+      
+        
+    #     plt.figure(figsize=(10, 6))
+    # # plt.hist(data, bins=100, density=True, alpha=0.6, color='blue', edgecolor='black', label='Data Histogram')
+    #     plt.hist(diff, bins=100, density=True, alpha=0.6, label='Data Resample')
+    #     plt.title("Data Distribution vs Gaussian Distribution", fontsize=14)
+    #     plt.xlabel("Value", fontsize=12)
+    #     plt.ylabel("Density", fontsize=12)
+    #     plt.legend()
+    #     plt.grid(True, alpha=0.3)
+    #     plt.show()
+        
+        labels, preds = q_rs[-1]
+    # 计算指标
+        from scipy.stats import pearsonr, spearmanr
+        from sklearn.metrics import r2_score
+        r_pearson, p_pearson = pearsonr(labels, preds)
+        r_spearman, p_spearman = spearmanr(labels, preds)
+        r2 = r2_score(labels, preds)
+
+        # 绘制散点图 + 回归线
+        plt.figure(figsize=(10, 6))
+        sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'})
+        # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
+        # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
+        plt.plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
+        plt.xlabel('True Labels')
+        plt.ylabel('Predictions')
+        plt.title(f'Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
+        plt.grid(True)
+        plt.show()
     
     
-    
+
+    # 绘制叠加直方图
+        # plt.figure(figsize=(10, 6))
+        # plt.hist(y, bins=50, alpha=0.5, label='Labels', color='blue')
+        # plt.hist(y_p, bins=50, alpha=0.5, label='Predictions', color='red')
+        # plt.xlabel('Value')
+        # plt.ylabel('Frequency')
+        # plt.title('Label vs. Prediction Distribution')
+        # plt.legend()
+        # plt.show()
+        
+        # 计算分位数
+        # quantiles = np.linspace(0, 1, 100)
+        # label_quantiles = np.quantile(labels, quantiles)
+        # pred_quantiles = np.quantile(preds, quantiles)
+
+        # # 绘制Q-Q图
+        # plt.figure(figsize=(8, 8))
+        # plt.scatter(label_quantiles, pred_quantiles, alpha=0.6)
+        # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='red')  # 对角线参考线
+        # plt.xlabel('Label Quantiles')
+        # plt.ylabel('Prediction Quantiles')
+        # plt.title('Q-Q Plot: Labels vs. Predictions')
+        # plt.grid(True)
+        # plt.show()
     
 if __name__ == "__main__":
-    plot_label(label_gen)
+    # plot_label(label_gen)
+    plot_pred()

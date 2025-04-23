@@ -51,16 +51,18 @@ class Trainer:
 
     def run_phase(self, phase, epoch_idx=0):
         sampler = self.samplers[phase]
+        if isinstance(sampler, list):
+            sampler = sampler[epoch_idx]
         batch_iter = sampler.iter(self.batch_size, phase)
 
-        # w = torch.asarray(sampler.w).to(self.device)
+        save_pd = []
 
         desc = f"{phase}-epoch-{epoch_idx}"
         batch_iter.desc = desc
         last_metrics = {}
 
         is_async = phase != "predict"
-        # is_async = False
+        save_pred = phase == "predict"
         streams = [torch.cuda.Stream() for _ in range(2)]
         data_cache = [None for i in range(2)]
 
@@ -76,6 +78,17 @@ class Trainer:
                         for k, v in last_metric.items()
                     }
                     last_metrics[name] = last_metric
+                    if save_pred:
+                        save_pd.append(
+                            pd.DataFrame.from_dict({
+                                "instrument":data["instrument"].reshape([-1]),
+                                "datetime":data["datetime"].reshape([-1]),
+                                "y":y.detach().cpu().numpy().reshape([-1]),
+                                "y_p":y_p.detach().cpu().numpy().reshape([-1]),
+                                }
+                            )
+                        )
+                        
 
             for name in self.models:
                 self.run_streams[name].synchronize()
@@ -93,7 +106,7 @@ class Trainer:
             if is_async:
                 with torch.cuda.stream(self.streams[(i) % len(streams)]):
                     batch = {
-                        k: v.to(self.device, non_blocking=True)
+                        k: v.to(self.device, non_blocking=True) if k not in ["datetime", "instrument"] else v
                         for k, v in data_i.items()
                     }
                     # if "indices" in batch:
@@ -106,7 +119,7 @@ class Trainer:
                 run(data, i - 1)
             else:
                 data = {
-                    k: torch.asarray(v, dtype=torch.float32, device=self.device)
+                    k: torch.asarray(v, dtype=torch.float32, device=self.device) if k not in ["datetime", "instrument"] else v
                     for k, v in data_i.items()
                 }
                 run(data, i)
@@ -123,6 +136,11 @@ class Trainer:
                     self.metric_name(k, phase, False), v, epoch_idx
                 )
                 print(f"{i} {phase} {k} ==> {v}")
+        if save_pred:
+            save_pd = pd.concat(save_pd)
+            print("save result", len(save_pd))
+            print(save_pd)
+            save_cache("predict.pkl", save_pd)
 
     def run(self, start=-1, epoch=3, save_name="model", save_last=True):
         def save(i):
@@ -192,12 +210,13 @@ if __name__ == "__main__":
             l = data["close"].shape[0]
             pred = np.concatenate(
                     [
-                        (data["open"][1:] / data["close"][:-1] - 1),
+                        (data["open"][1:] / data["close"][:-1] - 1) * 100,
                         [float("nan")] * 1,
                     ]
             )[:l]
             
-            valid = (np.abs(pred) <= 0.3)
+            # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
+            valid = (np.abs(pred) <= 0.098 * 100)
             pred = pred[valid]
             
             for k in data.keys():
@@ -225,43 +244,71 @@ if __name__ == "__main__":
             ("2024-01-01", "2025-12-31"),
             ("2024-01-01", "2025-12-31"),
         ]
+        
+        def get(date_range, i):
+            # date_ranges = [
+            #     ("2012-01-01", "2023-12-31"),
+            #     ("2024-01-01", "2024-01-31"),
+            #     ("2024-01-01", "2024-01-31"),
+            # ]
+            from datetime import datetime
+            from dateutil.relativedelta import relativedelta  # 需要安装
+
+            def add_month_safe(date_str, input_format="%Y-%m-%d"):
+                # 解析字符串为日期对象
+                date = datetime.strptime(date_str, input_format)
+                
+                # 直接加一个月（自动处理月末）
+                new_date = date + relativedelta(months=i)
+                return new_date.strftime(input_format)
+            b, e = date_range
+            return add_month_safe(b), add_month_safe(e) 
+            
+        epoch = 12
+        # date_ranges = [[
+        #     get(date_ranges[j], i) for i in range(epoch) 
+        # ] for j in range(len(date_ranges))]
+        
+        date_ranges = [[
+            get(date_ranges[j], i) for j in range(len(date_ranges))
+        ]  for i in range(epoch) ]
 
         # date_ranges = [
         #     ("2008-01-01", "2014-12-31"),
         #     ("2015-01-01", "2016-12-31"),
         #     ("2017-01-01", "2020-12-31"),
         # ]
+        for i in range(epoch):
+            samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[i])))
+            saved_models = from_cache(f"models.pkl")
+            saved_models = None
+            # for save_name in ["cls", "reg"]:
+            # for save_name in ["reg", "cls"]:
+            for save_name in ["reg"]:
+                # for k in samplers.keys():
+                #     samplers[k].use_label_weight = save_name == "cls"
+                    # print(f"use_label_weight {samplers[k].use_label_weight}")
+                schedule = [32]
+                # schedule = [128, 256, 512]
+                # schedule = [256]
+                if saved_models:
+                    models = saved_models[save_name][-1]["models"]
+                    epoch_idx = saved_models[save_name][-1]["epoch_idx"]
+                else:
+                    models = {}
 
-        samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges)))
-        # saved_models = from_cache(f"models.pkl")
-        saved_models = None
-        # for save_name in ["cls", "reg"]:
-        # for save_name in ["reg", "cls"]:
-        for save_name in ["reg"]:
-            # for k in samplers.keys():
-            #     samplers[k].use_label_weight = save_name == "cls"
-                # print(f"use_label_weight {samplers[k].use_label_weight}")
-            schedule = [32]
-            # schedule = [128, 256, 512]
-            # schedule = [256]
-            if saved_models:
-                models = saved_models[save_name][-1]["models"]
-                epoch_idx = saved_models[save_name][-1]["epoch_idx"]
-            else:
-                models = {}
+                    model_class = RegDNN if save_name == "reg" else ClsDNN
 
-                model_class = RegDNN if save_name == "reg" else ClsDNN
+                    for i in schedule:
+                        model_name = f"s2_{i}_{save_name}"
+                        models[model_name] = model_class(
+                            samplers[stages[0]].feature_columns(),
+                            scheduler_step=i,
+                        )
 
-                for i in schedule:
-                    model_name = f"s_{i}_{save_name}"
-                    models[model_name] = model_class(
-                        samplers[stages[0]].feature_columns(),
-                        scheduler_step=i,
-                    )
+                    epoch_idx = -1
 
-                epoch_idx = -1
+                # trainer = Trainer(8092 * 4, samplers, models)
+                trainer = Trainer(8092, samplers, models)
 
-            # trainer = Trainer(8092 * 4, samplers, models)
-            trainer = Trainer(8092, samplers, models)
-
-            trainer.run(epoch_idx, 10, save_name)
+                trainer.run(epoch_idx, epoch_idx + 1, save_name)

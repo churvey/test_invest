@@ -16,14 +16,17 @@ from trade.model.zoo import Net
 
 def mse(pred, target, weight = 1.0):
     # if not weight:
-    sqr_loss = torch.mul(pred - target, pred - target)
+    sqr_loss = torch.mul(pred - target, pred - target) * torch.abs(target)
     loss = torch.mul(sqr_loss, weight).mean()
     return loss
 
-
+def quantile_loss(y_pred, y_true, quantile=0.9):
+    error = y_true - y_pred
+    loss = torch.mean(torch.max(quantile * error, (quantile - 1) * error))
+    return loss
 
 class HuberLoss(nn.Module):
-    def __init__(self, delta=1.0):
+    def __init__(self, delta=0.01):
        
         super(HuberLoss, self).__init__()
         self.delta = delta

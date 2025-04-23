@@ -36,6 +36,7 @@ class Sampler:
         )
         self.label_np = features[loader.labels].to_numpy(dtype="float32")
         self.datetime_np = features["datetime"].to_numpy()
+        self.instrument_np = features["instrument"].to_numpy()
         self.datetime = np.sort(np.unique(self.datetime_np))
         self.w = self.weight(features)
         self.index = self.init_seed()
@@ -57,8 +58,26 @@ class Sampler:
                 weight_s[label == l] = weight[l]
             return weight_s
         else:
-            print(label)
-            return (label * label)
+            # print(label)
+            # return (label * label)
+            # return np.abs(label)
+            return 1
+            # weight = np.abs(label)
+            # bins = 200
+            
+            # bucket = np.arange(bins) / bins
+
+            # def get_value(w):
+            #     for i in range(len(bucket)):
+            #         if bucket[i] > w:
+            #             return bucket[i]
+            #     return 1
+            
+            # weight = np.array([
+            #     get_value(w) for w in weight
+            # ])
+            # return weight
+            
 
     def weight(self, features):
         w = np.arange(1, len(self.days) + 1, dtype="float64")
@@ -76,6 +95,8 @@ class Sampler:
     def to_numpy(self, index):
         return {
             "x": self.features_np[index, :],
+            "datetime": self.datetime_np[index],
+            "instrument": self.instrument_np[index],
             **{
                 self.labels[i]: self.label_np[index, i : i + 1]
                 for i in range(len(self.labels))
@@ -150,4 +171,13 @@ class SamplersCpp(Sampler):
         else:
             return super(SamplersCpp, self).iter(batch_size, phase, ratio)
         sampler = trade_cpp.NumpyDictSampler(self.data, batch_size, index.tolist())
-        return tqdm(sampler, total=self.len(batch_size, phase, ratio))
+        def sample():
+            for data in sampler:
+                indices = data.pop("indices").numpy()
+                yield {
+                    "datetime": self.datetime_np[indices],
+                    "instrument": self.instrument_np[indices],
+                    **data
+                }
+        
+        return tqdm(sample(), total=self.len(batch_size, phase, ratio))
