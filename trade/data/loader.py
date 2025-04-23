@@ -119,7 +119,7 @@ class QlibDataloader(BaseDataloader):
             d = { k:v for k,v in d.items() if k in d2.keys()}
             rs = list(d.items())
             index = np.arange(len(rs))
-            index =  np.random.choice(index, 300, replace=False)
+            index =  np.random.choice(index, 20, replace=False)
             return [rs[i] for i in index]
         #     # return [:50]
         return list(d.items())

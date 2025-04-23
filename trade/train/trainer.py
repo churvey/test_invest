@@ -137,6 +137,9 @@ class Trainer:
                 )
                 print(f"{i} {phase} {k} ==> {v}")
         if save_pred:
+            saved = from_cache(f"predict.pkl")
+            if saved is not None:
+                save_pd.append(saved)
             save_pd = pd.concat(save_pd)
             print("save result", len(save_pd))
             print(save_pd)
@@ -239,47 +242,42 @@ if __name__ == "__main__":
 
         stages = ["train", "valid", "predict"]
 
-        date_ranges = [
-            ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-12-31"),
-            ("2024-01-01", "2025-12-31"),
-        ]
-        
-        def get(date_range, i):
-            # date_ranges = [
-            #     ("2012-01-01", "2023-12-31"),
-            #     ("2024-01-01", "2024-01-31"),
-            #     ("2024-01-01", "2024-01-31"),
-            # ]
-            from datetime import datetime
-            from dateutil.relativedelta import relativedelta  # 需要安装
-
-            def add_month_safe(date_str, input_format="%Y-%m-%d"):
-                # 解析字符串为日期对象
-                date = datetime.strptime(date_str, input_format)
+        use_roller = True
+        epoch = 2
+        if not use_roller:
+            date_ranges = [
+                ("2008-01-01", "2023-12-31"),
+                ("2024-01-01", "2025-12-31"),
+                ("2024-01-01", "2025-12-31"),
+            ]
+            date_ranges = [date_ranges]
+        else:
+            date_ranges = [
+                ("2012-01-01", "2023-12-31"),
+                ("2024-01-01", "2024-01-31"),
+                ("2024-01-01", "2024-01-31"),
+            ]
+            def get(date_range, i):
                 
-                # 直接加一个月（自动处理月末）
-                new_date = date + relativedelta(months=i)
-                return new_date.strftime(input_format)
-            b, e = date_range
-            return add_month_safe(b), add_month_safe(e) 
-            
-        epoch = 12
-        # date_ranges = [[
-        #     get(date_ranges[j], i) for i in range(epoch) 
-        # ] for j in range(len(date_ranges))]
-        
-        date_ranges = [[
-            get(date_ranges[j], i) for j in range(len(date_ranges))
-        ]  for i in range(epoch) ]
+                from datetime import datetime
+                from dateutil.relativedelta import relativedelta  # 需要安装
 
-        # date_ranges = [
-        #     ("2008-01-01", "2014-12-31"),
-        #     ("2015-01-01", "2016-12-31"),
-        #     ("2017-01-01", "2020-12-31"),
-        # ]
-        for i in range(epoch):
-            samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[i])))
+                def add_month_safe(date_str, input_format="%Y-%m-%d"):
+                    # 解析字符串为日期对象
+                    date = datetime.strptime(date_str, input_format)
+                    
+                    # 直接加一个月（自动处理月末）
+                    new_date = date + relativedelta(months=i)
+                    return new_date.strftime(input_format)
+                b, e = date_range
+                return add_month_safe(b), add_month_safe(e) 
+    
+            date_ranges = [[
+                get(date_ranges[j], i) for j in range(len(date_ranges))
+            ]  for i in range(epoch) ]
+        print(date_ranges)
+        for data_i in range(len(date_ranges)):
+            samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])))
             saved_models = from_cache(f"models.pkl")
             saved_models = None
             # for save_name in ["cls", "reg"]:
@@ -310,5 +308,5 @@ if __name__ == "__main__":
 
                 # trainer = Trainer(8092 * 4, samplers, models)
                 trainer = Trainer(8092, samplers, models)
-
-                trainer.run(epoch_idx, epoch_idx + 1, save_name)
+                # print(epoch_idx, i + 1)
+                trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
