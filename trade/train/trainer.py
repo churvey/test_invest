@@ -10,7 +10,7 @@ import datetime
 
 from trade.data.loader import QlibDataloader, FtDataloader
 from trade.data.sampler import *
-from trade.model.reg_dnn import RegDNN
+from trade.model.reg_dnn import RegDNN, RegTransform
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
 import numpy as np
@@ -79,6 +79,8 @@ class Trainer:
                     }
                     last_metrics[name] = last_metric
                     if save_pred:
+                        import pdb
+                        pdb.set_trace()
                         save_pd.append(
                             pd.DataFrame.from_dict({
                                 "instrument":data["instrument"].reshape([-1]),
@@ -242,7 +244,7 @@ if __name__ == "__main__":
 
         stages = ["train", "valid", "predict"]
 
-        use_roller = True
+        use_roller = False
         epoch = 2
         if not use_roller:
             date_ranges = [
@@ -295,7 +297,7 @@ if __name__ == "__main__":
                 else:
                     models = {}
 
-                    model_class = RegDNN if save_name == "reg" else ClsDNN
+                    model_class = RegTransform if save_name == "reg" else ClsDNN
 
                     for i in schedule:
                         model_name = f"s2_{i}_{save_name}"

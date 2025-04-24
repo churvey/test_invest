@@ -8,10 +8,12 @@ import math
 
 class Sampler:
 
-    def __init__(self, loader , day_range=None):
+    def __init__(self, loader , day_range=None, seq_col = "instrument"):
         print(f"loader features:{len(loader.features)}")
         self.label_name = "y_pred"
         features = loader.features
+        self.seq_col = seq_col
+        # features.
         if day_range:
             begin, end = day_range
             features = features[
@@ -20,23 +22,40 @@ class Sampler:
             print(f"after select {day_range} features:{len(features)}")
         self.labels = loader.labels
         self.days = loader.days
-
+        self._feature_columns = loader.feature_columns
         columns = loader.indices + loader.feature_columns + loader.labels
         features = features[columns]
         l = len(features)
         na_count = features.isna().sum() / l
         t = dict(zip(features.columns, na_count.to_numpy()))
         logging.info(f"na_count { {k: v for k, v in t.items() if v > 0.05} }")
-        features = features.dropna()
-        logging.info(f"features:{len(features)}")
-
-        self._feature_columns = loader.feature_columns
+        if not seq_col:
+            features = features.dropna()
+            shape = [len(features), -1]
+            self.seq_len = 1
+        else:
+            assert seq_col in loader.indices
+            index_col = [p for p in loader.indices if p != seq_col][0]
+            index = features[[index_col]].drop_duplicates()
+            indices = index.merge(features[[seq_col]].drop_duplicates(), how="cross")
+            shape = [
+                len(
+                    index
+                ), -1
+            ]
+            self.seq_len = len(indices) // len(index)
+            features = features.merge(indices, how="right", on =loader.indices)
+            features = features.sort_values([index_col, seq_col])
+            features[self._feature_columns] = features[self._feature_columns].fillna(0)   
+            print(features)
+        
         self.features_np = np.ascontiguousarray(
             features[self._feature_columns].to_numpy(dtype="float32")
-        )
-        self.label_np = features[loader.labels].to_numpy(dtype="float32")
-        self.datetime_np = features["datetime"].to_numpy()
-        self.instrument_np = features["instrument"].to_numpy()
+        ).reshape(shape)
+        print("features_np", self.features_np.shape)
+        self.label_np = features[loader.labels].to_numpy(dtype="float32").reshape(shape)
+        self.datetime_np = features["datetime"].to_numpy().reshape(shape)
+        self.instrument_np = features["instrument"].to_numpy().reshape(shape)
         self.datetime = np.sort(np.unique(self.datetime_np))
         self.w = self.weight(features)
         self.index = self.init_seed()
@@ -80,6 +99,8 @@ class Sampler:
             
 
     def weight(self, features):
+        if self.seq_col:
+            return 1
         w = np.arange(1, len(self.days) + 1, dtype="float64")
         weight_mapping = dict(zip(self.days, w))
         weight = features["datetime"].map(weight_mapping)
@@ -87,18 +108,20 @@ class Sampler:
         weight = weight / weight.mean()
         weight = weight.to_numpy(dtype="float32").reshape([-1])
         assert weight.shape[0] == self.features_np.shape[0]
-        return weight
+        return weight.astype("float64")
 
     def sample(self, batch_size, i):
         return self.index[batch_size * i : batch_size * (i + 1)]
 
     def to_numpy(self, index):
+        import pdb
+        pdb.set_trace()
         return {
-            "x": self.features_np[index, :],
-            "datetime": self.datetime_np[index],
-            "instrument": self.instrument_np[index],
+            "x": self.features_np[index, ...],
+            "datetime": self.datetime_np[index,...],
+            "instrument": self.instrument_np[index,...],
             **{
-                self.labels[i]: self.label_np[index, i : i + 1]
+                self.labels[i]: self.label_np[index, ... ,i * self.seq_len : (i + 1) * self.seq_len]
                 for i in range(len(self.labels))
             },
         }
@@ -117,7 +140,7 @@ class Sampler:
             return self.to_numpy(self.sample(int(1e8), i))
         else:
             date = self.datetime[i]
-            samples = self.datetime_np == date
+            samples = (self.datetime_np.reshape([len(self.datetime_np), -1])[:,-1] == date)
             return self.to_numpy(samples)
 
     def iter(self, batch_size, phase="train", ratio=1.0):
@@ -161,9 +184,9 @@ class SamplersCpp(Sampler):
         index = np.arange(self.features_np.shape[0])
         if phase == "train":
             n = int(index.shape[0] * ratio)
-            weight = self.w.astype("float64")
+            weight = (np.zeros(index.shape) + 1 ) * self.w
             weight *= self.label_weight()
-            weight /= weight.sum()
+            weight /= np.sum(weight)
             index = np.random.choice(index, n, replace=True, p=weight)
         elif phase == "valid":
             batch_size = int(8096 * 16)
