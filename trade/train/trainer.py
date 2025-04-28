@@ -10,7 +10,7 @@ import datetime
 
 from trade.data.loader import QlibDataloader, FtDataloader
 from trade.data.sampler import *
-from trade.model.reg_dnn import RegDNN, RegTransform
+from trade.model.reg_dnn import RegDNN, RegTransformer
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
 import numpy as np
@@ -49,7 +49,7 @@ class Trainer:
             return f"{base}-per_step"
         return base
 
-    def run_phase(self, phase, epoch_idx=0):
+    def run_phase(self, phase, epoch_idx=0, save_name = None):
         sampler = self.samplers[phase]
         if isinstance(sampler, list):
             sampler = sampler[epoch_idx]
@@ -139,24 +139,21 @@ class Trainer:
                 )
                 print(f"{i} {phase} {k} ==> {v}")
         if save_pred:
-            saved = from_cache(f"predict.pkl")
+            saved = from_cache(f"{save_name}/predict.pkl")
             if saved is not None:
                 save_pd.append(saved)
             save_pd = pd.concat(save_pd)
             print("save result", len(save_pd))
             print(save_pd)
-            save_cache("predict.pkl", save_pd)
+            save_cache(f"{save_name}/predict.pkl", save_pd)
 
-    def run(self, start=-1, epoch=3, save_name="model", save_last=True):
+    def run(self, start=-1, epoch=3, save_name=None, save_last=True):
         def save(i):
-            saved = from_cache(f"models.pkl")
+            saved = from_cache(f"{save_name}/models.pkl")
             if not saved:
-                saved = {}
-            if save_name in saved:
-                saved[save_name].append({"models": self.models, "epoch_idx": i})
-            else:
-                saved.update({save_name: [{"models": self.models, "epoch_idx": i}]})
-            save_cache(f"models.pkl", saved)
+                saved = []
+            saved.append({"models": self.models, "epoch_idx": i})
+            save_cache(f"{save_name}/models.pkl", saved)
 
         for i in range(start + 1, epoch):
             for m in self.models.values():
@@ -175,14 +172,14 @@ class Trainer:
             for m in self.models.values():
                 m.eval()
                 m.reset_metrics()
-            self.run_phase("predict")
+            self.run_phase("predict", save_name=save_name)
 
 
-def get_samplers_cpp(label_gen, date_ranges, csi=None):
+def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument"):
     loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
     # loader = FtDataloader("tmp", [label_gen])
-    return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
+    return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
 def get_label(data):
@@ -209,83 +206,88 @@ def get_label(data):
 
 if __name__ == "__main__":
 
-    with Context() as ctx:
 
-        def label_gen(data):
-            l = data["close"].shape[0]
-            pred = np.concatenate(
-                    [
-                        (data["open"][1:] / data["close"][:-1] - 1) * 100,
-                        [float("nan")] * 1,
-                    ]
-            )[:l]
-            
-            # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
-            valid = (np.abs(pred) <= 0.098 * 100)
-            pred = pred[valid]
-            
-            for k in data.keys():
-                data[k] = data[k][valid]            
-            
-            return {
-                # "pred": np.concatenate(
-                #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
-                # )[:l],
-                "pred": pred,
-                # "pred": np.concatenate(
-                #     [np.log(data["open"] / data["close"]), []]
-                # )[:l],
-                # "pred": np.concatenate(
-                #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
-                # )[:l],
-                # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
-                #  "cls": get_label(data),
-            }
 
-        stages = ["train", "valid", "predict"]
+    def label_gen(data):
+        l = data["close"].shape[0]
+        pred = np.concatenate(
+                [
+                    (data["open"][1:] / data["close"][:-1] - 1) * 100,
+                    [float("nan")] * 1,
+                ]
+        )[:l]
+        
+        # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
+        valid = (np.abs(pred) <= 0.098 * 100)
+        pred = pred[valid]
+        
+        for k in data.keys():
+            data[k] = data[k][valid]            
+        
+        return {
+            # "pred": np.concatenate(
+            #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
+            # )[:l],
+            "pred": pred,
+            # "pred": np.concatenate(
+            #     [np.log(data["open"] / data["close"]), []]
+            # )[:l],
+            # "pred": np.concatenate(
+            #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
+            # )[:l],
+            # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
+            #  "cls": get_label(data),
+        }
 
-        use_roller = False
-        epoch = 20
-        if not use_roller:
-            date_ranges = [
-                ("2008-01-01", "2023-12-31"),
-                ("2024-01-01", "2025-12-31"),
-                # ("2008-01-01", "2023-12-31"),
-                ("2024-01-01", "2025-12-31"),
-            ]
-            date_ranges = [date_ranges]
-        else:
-            date_ranges = [
-                ("2012-01-01", "2023-12-31"),
-                ("2024-01-01", "2024-01-31"),
-                ("2024-01-01", "2024-01-31"),
-            ]
-            def get(date_range, i):
+    stages = ["train", "valid", "predict"]
+
+    use_roller = False
+    epoch = 6
+    if not use_roller:
+        date_ranges = [
+            ("2008-01-01", "2023-12-31"),
+            ("2024-01-01", "2025-12-31"),
+            # ("2008-01-01", "2023-12-31"),
+            ("2024-01-01", "2025-12-31"),
+        ]
+        date_ranges = [date_ranges]
+    else:
+        date_ranges = [
+            ("2012-01-01", "2023-12-31"),
+            ("2024-01-01", "2024-01-31"),
+            ("2024-01-01", "2024-01-31"),
+        ]
+        def get(date_range, i):
+            
+            from datetime import datetime
+            from dateutil.relativedelta import relativedelta  # 需要安装
+
+            def add_month_safe(date_str, input_format="%Y-%m-%d"):
+                # 解析字符串为日期对象
+                date = datetime.strptime(date_str, input_format)
                 
-                from datetime import datetime
-                from dateutil.relativedelta import relativedelta  # 需要安装
+                # 直接加一个月（自动处理月末）
+                new_date = date + relativedelta(months=i)
+                return new_date.strftime(input_format)
+            b, e = date_range
+            return add_month_safe(b), add_month_safe(e) 
 
-                def add_month_safe(date_str, input_format="%Y-%m-%d"):
-                    # 解析字符串为日期对象
-                    date = datetime.strptime(date_str, input_format)
-                    
-                    # 直接加一个月（自动处理月末）
-                    new_date = date + relativedelta(months=i)
-                    return new_date.strftime(input_format)
-                b, e = date_range
-                return add_month_safe(b), add_month_safe(e) 
-    
-            date_ranges = [[
-                get(date_ranges[j], i) for j in range(len(date_ranges))
-            ]  for i in range(epoch) ]
-        print(date_ranges)
-        for data_i in range(len(date_ranges)):
-            samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])))
-            saved_models = from_cache(f"models.pkl")
-            saved_models = None
-            # for save_name in ["cls", "reg"]:
-            # for save_name in ["reg", "cls"]:
-            for save_name in ["reg"]:
+        date_ranges = [[
+            get(date_ranges[j], i) for j in range(len(date_ranges))
+        ]  for i in range(epoch) ]
+    print(date_ranges)
+    for data_i in range(len(date_ranges)):
+        for model_class in [RegTransformer, RegDNN]:
+            save_name = str(model_class.__name__.split(".")[-1])
+            with Context() as ctx:
+                saved_models = from_cache(f"{save_name}/models.pkl")
+                seq_col = None
+                if "Transformer" in save_name:
+                    seq_col = "instrument" 
+                if "LSTM" in save_name:
+                    seq_col = "datetime"
+                
+                samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
                 # for k in samplers.keys():
                 #     samplers[k].use_label_weight = save_name == "cls"
                     # print(f"use_label_weight {samplers[k].use_label_weight}")
@@ -293,12 +295,10 @@ if __name__ == "__main__":
                 # schedule = [128, 256, 512]
                 # schedule = [256]
                 if saved_models:
-                    models = saved_models[save_name][-1]["models"]
-                    epoch_idx = saved_models[save_name][-1]["epoch_idx"]
+                    models = saved_models[-1]["models"]
+                    epoch_idx = saved_models[-1]["epoch_idx"]
                 else:
                     models = {}
-
-                    model_class = RegTransform if save_name == "reg" else ClsDNN
 
                     for i in schedule:
                         model_name = f"s2_{i}_{save_name}"
@@ -309,7 +309,10 @@ if __name__ == "__main__":
 
                     epoch_idx = -1
 
+                batch_size = 16
+                if not seq_col:
+                    batch_size *= 192
                 # trainer = Trainer(8092 * 4, samplers, models)
-                trainer = Trainer(256, samplers, models)
+                trainer = Trainer(batch_size, samplers, models)
                 # print(epoch_idx, i + 1)
                 trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)

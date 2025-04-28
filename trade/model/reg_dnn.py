@@ -60,43 +60,34 @@ class RegDNN(Model, nn.Module):
         # self.loss_fn = TweedieLoss()
         self.device = device
         self.metrics = {
-            # "pcorr": PearsonCorrCoef().to(self.device),
-            # "mae": MeanAbsoluteError().to(self.device),
-            # "mse": MeanSquaredError().to(self.device),
-            # "r2": R2Score().to(self.device),
+            "pcorr": PearsonCorrCoef().to(self.device),
+            "mae": MeanAbsoluteError().to(self.device),
+            "mse": MeanSquaredError().to(self.device),
+            "r2": R2Score().to(self.device),
         }
         self.scheduler_step = scheduler_step
 
     def forward(self, *args, **kwargs):
-        return self.model.forward(*args, **kwargs)
+        return self.model.forward(*args)
 
     def step(self, data, step_idx, is_train=False):
         x = data["x"]
-        if torch.isnan(x).any():
-            print("发现NaN数据", x)
-            raise ValueError()
         y = data["y_pred"]
         self.optimizer.zero_grad()
-        y_p = self.forward(x)
-        loss = self.loss_fn(y_p, y)
-        loss_w = None
+        y_p = self.forward(x, **data)
+        no_nan = ~torch.isnan(y)
+        y_no_nan = y[no_nan].reshape([-1, 1])
+        y_p_no_nan = y_p[no_nan].reshape([-1, 1])
+        
+        loss = self.loss_fn(y_no_nan, y_p_no_nan)
         if is_train:
-            if "w" in data:
-                loss_w = self.loss_fn(y_p, y, data["w"])
-            else:
-                loss_w = loss
-            loss_w.backward()
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(), max_norm=1.0, norm_type=2
             )
-            for param in self.model.parameters():
-                if param.grad is not None:
-                    if torch.isnan(param.grad).any():
-                        print("发现NaN梯度！", param, param.grad)
-                        raise ValueError()
             self.optimizer.step()
             if step_idx > self.scheduler_step and step_idx % self.scheduler_step == 0:
-                self.scheduler.step(metrics=loss_w)
+                self.scheduler.step(metrics=loss)
             rs = y_p.detach(), y, loss.detach()
         else:
             rs = y_p, y, loss
@@ -104,17 +95,12 @@ class RegDNN(Model, nn.Module):
         m = {
             "loss": rs[-1],
         }
-        if is_train and "w" in data:
-            m["loss_w"] = loss_w.detach()
-            m["w"] = data["w"].mean().detach()
-            m["w_max"] = data["w"].max().detach()
-            m["w_min"] = data["w"].min().detach()
         for k, v in self.metrics.items():
-            m[k] = v(rs[0], rs[1])
-        # m["y_abs"] = y.abs().mean().detach()
-        # m["yp_abs"] = y_p.abs().mean().detach()
-        m["y"] = y.nanmean().detach()
-        m["yp"] = y_p.nanmean().detach()
+            m[k] = v(y_no_nan, y_p_no_nan)
+        m["y_abs"] = y_no_nan.abs().mean().detach()
+        m["yp_abs"] = y_p_no_nan.abs().mean().detach()
+        m["y"] = y_no_nan.mean().detach()
+        m["yp"] = y_p_no_nan.mean().detach()
         # m["y_var"] = y.std().detach()
         # m["yp_var"] = y_p.std().detach()
             # m["y_q85"] = torch.quantile(y.abs(), 0.85).detach()
@@ -150,7 +136,7 @@ class Transformer(nn.Module):
         self.device = device
         self.d_feat = d_feat
 
-    def forward(self, src):
+    def forward(self, src, mask = None):
         # src [N, F*T] --> [N, T, F]
         # src = src.reshape(len(src), self.d_feat, -1).permute(0, 2, 1)
         
@@ -160,10 +146,8 @@ class Transformer(nn.Module):
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
         src = src.transpose(1, 0)  # not batch first
 
-        mask = None
-
         # src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, mask)  # [60, 512, 8]
+        output = self.transformer_encoder(src, src_key_padding_mask=mask)  # [60, 512, 8]
 
         # [T, N, F] --> [N, T*F]
         output = self.decoder_layer(output.transpose(1, 0))  # [512, 1]
@@ -171,11 +155,11 @@ class Transformer(nn.Module):
         return output.squeeze(dim=-1)
         # return output[..., 0]
 
-class RegTransform(RegDNN):
+class RegTransformer(RegDNN):
 
     def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
         # nn.Module.__init__(self)
-        super(RegTransform, self).__init__(features, output_dim, device, scheduler_step)
+        super(RegTransformer, self).__init__(features, output_dim, device, scheduler_step)
         self.model = Transformer(len(self.features), device = self.device)
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.0005, weight_decay=0.0002
@@ -193,3 +177,8 @@ class RegTransform(RegDNN):
             eps=1e-08,
         )
 
+    def forward(self, *args, **kwargs):
+        mask = None
+        y = kwargs["y_pred"].squeeze(dim=-1)
+        mask = torch.isnan(y)
+        return self.model.forward(*args, mask)

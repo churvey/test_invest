@@ -47,6 +47,7 @@ def save_cache(path, obj, dumps=cloudpickle.dumps):
     global global_context
     if global_context and global_context.enable_cache:
         s = os.path.join(global_context.work_dir, path)
+        os.makedirs(os.path.dirname(s), exist_ok=True)
         print(f"save to cache:{s}")
         with open(s, "wb") as f:
             f.write(cloudpickle.dumps(obj))

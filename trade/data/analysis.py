@@ -104,9 +104,9 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
-def plot_pred():
+def plot_pred(save_name = "RegDNN"):
     with Context() as ctx:
-        pred = from_cache(f"predict.pkl")
+        pred = from_cache(f"{save_name}/predict.pkl")
         
         top_n = pred.groupby('datetime').apply(
             lambda x: x.sort_values('y_p', ascending=False).head(5)
@@ -160,7 +160,7 @@ def plot_pred():
     #     plt.grid(True, alpha=0.3)
     #     plt.show()
         
-        labels, preds = q_rs[-1]
+        # labels, preds = q_rs[-1]
     # 计算指标
         from scipy.stats import pearsonr, spearmanr
         from sklearn.metrics import r2_score
@@ -209,4 +209,5 @@ def plot_pred():
     
 if __name__ == "__main__":
     # plot_label(label_gen)
-    plot_pred()
+    plot_pred("RegDNN")
+    plot_pred("RegTransformer")

@@ -164,8 +164,8 @@ class Sampler:
 
 class SamplersCpp(Sampler):
 
-    def __init__(self, loader, day_range=None):
-        super(SamplersCpp, self).__init__(loader, day_range)
+    def __init__(self, loader, day_range=None, seq_col = "instrument"):
+        super(SamplersCpp, self).__init__(loader, day_range, seq_col)
         self.data = {
             "x": self.features_np,
             **{
