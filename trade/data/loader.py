@@ -21,6 +21,11 @@ def get_inst(path, type="all"):
     sorted_keys = sorted(list(ins.keys()))
     return {k: ins[k] for k in sorted_keys}
 
+def list_dir(path = "./data/K_1M"):
+    files = os.listdir(path)
+    files = [f.split("-")[0].replace(".", "") for f in files]
+    return files
+
 
 @ray.remote
 def parallel_get_stock_features(loader, *args):
@@ -115,11 +120,13 @@ class QlibDataloader(BaseDataloader):
     def get_stock_params(self):
         d = get_inst(self.path)
         if True:
-            d2 = get_inst(self.path, "csi300")
-            d = { k:v for k,v in d.items() if k in d2.keys()}
+            # d2 = get_inst(self.path, "csi300")
+            # keys = d2.keys()
+            keys = list_dir()
+            d = { k:v for k,v in d.items() if k in keys}
             rs = list(d.items())
             index = np.arange(len(rs))
-            index =  np.random.choice(index, 200, replace=False)
+            index =  np.random.choice(index, min(10000, len(rs)), replace=False)
             return [rs[i] for i in index]
         #     # return [:50]
         return list(d.items())

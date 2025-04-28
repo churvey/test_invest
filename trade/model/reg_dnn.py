@@ -13,7 +13,6 @@ from trade.model.zoo import Net
 from trade.model.model import Model, mse, TweedieLoss
 
 
-
 from torchmetrics import (
     AUROC,
     Accuracy,
@@ -73,12 +72,14 @@ class RegDNN(Model, nn.Module):
     def step(self, data, step_idx, is_train=False):
         x = data["x"]
         y = data["y_pred"]
+        # print(x.shape, y.shape)
+        # 1/0
         self.optimizer.zero_grad()
         y_p = self.forward(x, **data)
-        no_nan = ~torch.isnan(y)
-        y_no_nan = y[no_nan].reshape([-1, 1])
-        y_p_no_nan = y_p[no_nan].reshape([-1, 1])
-        
+        no_nan = ~torch.isnan(y).reshape([-1, 1])
+        y_no_nan = y.reshape([-1, 1])[no_nan]
+        y_p_no_nan = y_p.reshape([-1, 1])[no_nan]
+
         loss = self.loss_fn(y_no_nan, y_p_no_nan)
         if is_train:
             loss.backward()
@@ -103,8 +104,8 @@ class RegDNN(Model, nn.Module):
         m["yp"] = y_p_no_nan.mean().detach()
         # m["y_var"] = y.std().detach()
         # m["yp_var"] = y_p.std().detach()
-            # m["y_q85"] = torch.quantile(y.abs(), 0.85).detach()
-            # m["yp_q85"] = torch.quantile(y_p.abs(), 0.85).detach()
+        # m["y_q85"] = torch.quantile(y.abs(), 0.85).detach()
+        # m["yp_q85"] = torch.quantile(y_p.abs(), 0.85).detach()
 
         return *rs, m
 
@@ -126,28 +127,46 @@ class RegDNN(Model, nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, d_feat=6, d_model=8, nhead=4, num_layers=2, dropout=0.5, device=None):
+    def __init__(
+        self,
+        d_feat=6,
+        d_model=8,
+        nhead=4,
+        dim_feedforward=256,
+        num_layers=2,
+        dropout=0.5,
+        device=None,
+    ):
         super(Transformer, self).__init__()
         self.feature_layer = nn.Linear(d_feat, d_model)
         # self.pos_encoder = PositionalEncoding(d_model)
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dropout=dropout)
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
+        self.encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            self.encoder_layer, num_layers=num_layers
+        )
         self.decoder_layer = nn.Linear(d_model, 1)
         self.device = device
         self.d_feat = d_feat
 
-    def forward(self, src, mask = None):
+    def forward(self, src, mask=None):
         # src [N, F*T] --> [N, T, F]
         # src = src.reshape(len(src), self.d_feat, -1).permute(0, 2, 1)
-        
-        src = src.reshape(len(src),  -1, self.d_feat)
+
+        src = src.reshape(len(src), -1, self.d_feat)
         src = self.feature_layer(src)
 
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
         src = src.transpose(1, 0)  # not batch first
 
         # src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, src_key_padding_mask=mask)  # [60, 512, 8]
+        output = self.transformer_encoder(
+            src, src_key_padding_mask=mask
+        )  # [60, 512, 8]
 
         # [T, N, F] --> [N, T*F]
         output = self.decoder_layer(output.transpose(1, 0))  # [512, 1]
@@ -155,14 +174,17 @@ class Transformer(nn.Module):
         return output.squeeze(dim=-1)
         # return output[..., 0]
 
+
 class RegTransformer(RegDNN):
 
     def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
         # nn.Module.__init__(self)
-        super(RegTransformer, self).__init__(features, output_dim, device, scheduler_step)
-        self.model = Transformer(len(self.features), device = self.device)
+        super(RegTransformer, self).__init__(
+            features, output_dim, device, scheduler_step
+        )
+        self.model = Transformer(len(self.features), device=self.device)
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=0.0005, weight_decay=0.0002
+            self.model.parameters(), lr=0.002, weight_decay=0.0002
         )
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
@@ -181,4 +203,7 @@ class RegTransformer(RegDNN):
         mask = None
         y = kwargs["y_pred"].squeeze(dim=-1)
         mask = torch.isnan(y)
+        # print(y)
+        # print(mask)
+        # 1/0
         return self.model.forward(*args, mask)

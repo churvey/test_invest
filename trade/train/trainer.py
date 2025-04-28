@@ -242,7 +242,7 @@ if __name__ == "__main__":
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 6
+    epoch = 100
     if not use_roller:
         date_ranges = [
             ("2008-01-01", "2023-12-31"),
@@ -277,11 +277,11 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     for data_i in range(len(date_ranges)):
-        for model_class in [RegTransformer, RegDNN]:
+        for model_class in [ RegDNN, RegTransformer]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")
-                seq_col = None
+                seq_col = "instrument"
                 if "Transformer" in save_name:
                     seq_col = "instrument" 
                 if "LSTM" in save_name:
@@ -293,7 +293,7 @@ if __name__ == "__main__":
                     # print(f"use_label_weight {samplers[k].use_label_weight}")
                 schedule = [32]
                 # schedule = [128, 256, 512]
-                # schedule = [256]
+                # schedule = [512]
                 if saved_models:
                     models = saved_models[-1]["models"]
                     epoch_idx = saved_models[-1]["epoch_idx"]
@@ -309,9 +309,9 @@ if __name__ == "__main__":
 
                     epoch_idx = -1
 
-                batch_size = 16
-                if not seq_col:
-                    batch_size *= 192
+                batch_size = 64
+                # if not seq_col:
+                #     batch_size *= 384
                 # trainer = Trainer(8092 * 4, samplers, models)
                 trainer = Trainer(batch_size, samplers, models)
                 # print(epoch_idx, i + 1)

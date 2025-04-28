@@ -11,6 +11,7 @@ import datetime
 class Net(nn.Module):
         def __init__(self, input_dim, output_dim=1, layers=(256,), act="LeakyReLU"):
             super(Net, self).__init__()
+            self.input_dim = input_dim
             layers = [input_dim] + list(layers)
             dnn_layers = []
             drop_input = nn.Dropout(0.05)
@@ -46,6 +47,7 @@ class Net(nn.Module):
                     )
 
         def forward(self, x):
+            x = x.reshape([-1, self.input_dim])
             cur_output = x
             for i, now_layer in enumerate(self.dnn_layers):
                 cur_output = now_layer(cur_output)

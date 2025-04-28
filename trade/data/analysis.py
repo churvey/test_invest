@@ -104,80 +104,105 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
-def plot_pred(save_name = "RegDNN"):
+def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
     with Context() as ctx:
-        pred = from_cache(f"{save_name}/predict.pkl")
+        preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
         
-        top_n = pred.groupby('datetime').apply(
-            lambda x: x.sort_values('y_p', ascending=False).head(5)
-        ).reset_index(drop=True)
-        labels_t = top_n["y"].to_numpy()
-        preds_t = top_n["y_p"].to_numpy()
+        pred = preds[0].copy()
         
-        d_sig = np.sum(labels_t * preds_t >0)
-        print(
-            "d_sig top_n", d_sig / len(labels_t)
-        )
+        direct = (preds[1]["y"] * preds[0]["y"] > 0)
+        pred["y"] = ((preds[1]["y"] + preds[0]["y"]) / 2)
         
+        pred = pred[direct]
         
-        labels = pred["y"].to_numpy()
-        preds = pred["y_p"].to_numpy()
-        np.random.seed(42)
-
-        # mae = np.abs(labels-preds)
-        diff = labels-preds
-        print(
-            "mean", np.mean(diff)
-        )
-        d_sig = np.sum(labels * preds >0)
-        print(
-            "d_sig", d_sig / len(labels)
-        )
+        save_names.append("mix_0")
+        preds.append(pred)
         
-        q_rs = []
-        for q in [0.75, 0.85, 0.95, 0.99, 0.995]:
-            q_v = np.quantile(preds, q)
-            select = preds >= q_v
-            d_sig = np.sum(labels[select] * preds[select] > 0)
-            d_sig_n = np.sum(labels[select] * preds[select] < 0)
+        # pred = preds[1].copy()
+        # pred["y"] = preds[0]["y_p"]
+        # save_names.append("mix_1")
+        # preds.append(pred)
+        
+        fig, axs = plt.subplots(len(preds), 2, figsize=(10, 8))
+        
+        for idx, pred in enumerate(preds):
+            
+            
+            
+            top_n = pred.groupby('datetime').apply(
+                lambda x: x.sort_values('y_p', ascending=False).head(5)
+            ).reset_index(drop=True)
+            labels_t = top_n["y"].to_numpy()
+            preds_t = top_n["y_p"].to_numpy()
+            
+            d_sig = np.sum(labels_t * preds_t >0)
             print(
-                f"d_sig:{d_sig / len(labels[select])} {d_sig_n/ len(labels[select])} q:{q}, q_v{q_v}"
+                "d_sig top_n", d_sig / len(labels_t)
             )
-            q_rs.append(
-                [labels[select] , preds[select]]
-            )
-        
-        
-      
-        
-    #     plt.figure(figsize=(10, 6))
-    # # plt.hist(data, bins=100, density=True, alpha=0.6, color='blue', edgecolor='black', label='Data Histogram')
-    #     plt.hist(diff, bins=100, density=True, alpha=0.6, label='Data Resample')
-    #     plt.title("Data Distribution vs Gaussian Distribution", fontsize=14)
-    #     plt.xlabel("Value", fontsize=12)
-    #     plt.ylabel("Density", fontsize=12)
-    #     plt.legend()
-    #     plt.grid(True, alpha=0.3)
-    #     plt.show()
-        
-        # labels, preds = q_rs[-1]
-    # 计算指标
-        from scipy.stats import pearsonr, spearmanr
-        from sklearn.metrics import r2_score
-        r_pearson, p_pearson = pearsonr(labels, preds)
-        r_spearman, p_spearman = spearmanr(labels, preds)
-        r2 = r2_score(labels, preds)
+            
+            
+            labels = pred["y"].to_numpy()
+            preds = pred["y_p"].to_numpy()
+            np.random.seed(42)
 
-        # 绘制散点图 + 回归线
-        plt.figure(figsize=(10, 6))
-        sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'})
-        # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
-        # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
-        plt.plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
-        plt.xlabel('True Labels')
-        plt.ylabel('Predictions')
-        plt.title(f'Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
-        plt.grid(True)
+            # mae = np.abs(labels-preds)
+            diff = labels-preds
+            print(
+                "mean", np.mean(diff), len(pred)
+            )
+            d_sig = np.sum(labels * preds >0)
+            print(
+                "d_sig", d_sig / len(labels)
+            )
+            
+            q_rs = []
+            for q in [0.75, 0.85, 0.95, 0.99, 0.995, 0.999]:
+                q_v = np.quantile(preds, q)
+                select = preds >= q_v
+                d_sig = np.sum(labels[select] * preds[select] > 0)
+                # d_sig_n = np.sum(labels[select] * preds[select] < 0)
+                
+                d_sig_2 = np.sum(labels[select] >= 1.0 )
+                print(
+                    f"d_sig:{d_sig / len(labels[select])} {d_sig_2/ len(labels[select])} q:{q}, q_v{q_v}"
+                )
+                q_rs.append(
+                    [labels[select] , preds[select]]
+                )
+            
+            
+        
+            
+        #     plt.figure(figsize=(10, 6))
+        # # plt.hist(data, bins=100, density=True, alpha=0.6, color='blue', edgecolor='black', label='Data Histogram')
+        #     plt.hist(diff, bins=100, density=True, alpha=0.6, label='Data Resample')
+        #     plt.title("Data Distribution vs Gaussian Distribution", fontsize=14)
+        #     plt.xlabel("Value", fontsize=12)
+        #     plt.ylabel("Density", fontsize=12)
+        #     plt.legend()
+        #     plt.grid(True, alpha=0.3)
+        #     plt.show()
+            
+            labels, preds = q_rs[-1]
+        # 计算指标
+            from scipy.stats import pearsonr, spearmanr
+            from sklearn.metrics import r2_score
+            r_pearson, p_pearson = pearsonr(labels, preds)
+            r_spearman, p_spearman = spearmanr(labels, preds)
+            r2 = r2_score(labels, preds)
+
+            # 绘制散点图 + 回归线
+            # plt.figure(figsize=(10, 6))
+            # plt.subplot(len(preds) + 1, 1, idx+1) 
+            sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'}, ax=axs[idx, 0])
+            # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
+            # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
+            axs[idx, 0].plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
+            # axs[idx, 0].xlabel('True Labels')
+            # axs[idx, 0].ylabel('Predictions')
+            axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
+            
+        # plt.grid(True)
         plt.show()
     
     
@@ -209,5 +234,16 @@ def plot_pred(save_name = "RegDNN"):
     
 if __name__ == "__main__":
     # plot_label(label_gen)
-    plot_pred("RegDNN")
-    plot_pred("RegTransformer")
+    plot_pred()
+    # plot_pred("RegDNN")
+    # plot_pred("RegTransformer")
+    # def get_pred(save_name):
+    #     with Context() as ctx:
+    #         pred = from_cache(f"{save_name}/predict.pkl")
+    #         return pred
+    # p1 = get_pred("RegDNN")
+    # p2 = get_pred("RegTransformer")
+    
+    # dd = pd.merge(p1, p2, how="outer", on=["datetime", "instrument"], sort=True)
+    
+    # print(dd)
