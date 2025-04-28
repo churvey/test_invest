@@ -115,7 +115,7 @@ class Sampler:
 
     def to_numpy(self, index):
         import pdb
-        pdb.set_trace()
+        # pdb.set_trace()
         return {
             "x": self.features_np[index, ...],
             "datetime": self.datetime_np[index,...],
@@ -169,7 +169,7 @@ class SamplersCpp(Sampler):
         self.data = {
             "x": self.features_np,
             **{
-                self.labels[i]: np.ascontiguousarray(self.label_np[:, i : i + 1])
+                self.labels[i]: np.ascontiguousarray(self.label_np[:, i * self.seq_len : (i + 1)*self.seq_len])
                 for i in range(len(self.labels))
             },
         }

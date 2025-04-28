@@ -16,8 +16,14 @@ from trade.model.zoo import Net
 
 def mse(pred, target, weight = 1.0):
     # if not weight:
+    # print("shapes", pred.shape, target.shape)
+    no_nan = ~torch.isnan(target)
+    pred = pred[no_nan]
+    target = target[no_nan]
+    
     sqr_loss = torch.mul(pred - target, pred - target) * torch.abs(target)
-    loss = torch.mul(sqr_loss, weight).nanmean()
+    
+    loss = torch.mul(sqr_loss, weight).mean()
     return loss
 
 def quantile_loss(y_pred, y_true, quantile=0.9):

@@ -80,7 +80,7 @@ class Trainer:
                     last_metrics[name] = last_metric
                     if save_pred:
                         import pdb
-                        pdb.set_trace()
+                        # pdb.set_trace()
                         save_pd.append(
                             pd.DataFrame.from_dict({
                                 "instrument":data["instrument"].reshape([-1]),
@@ -88,7 +88,7 @@ class Trainer:
                                 "y":y.detach().cpu().numpy().reshape([-1]),
                                 "y_p":y_p.detach().cpu().numpy().reshape([-1]),
                                 }
-                            )
+                            ).dropna()
                         )
                         
 
@@ -245,11 +245,12 @@ if __name__ == "__main__":
         stages = ["train", "valid", "predict"]
 
         use_roller = False
-        epoch = 2
+        epoch = 20
         if not use_roller:
             date_ranges = [
                 ("2008-01-01", "2023-12-31"),
                 ("2024-01-01", "2025-12-31"),
+                # ("2008-01-01", "2023-12-31"),
                 ("2024-01-01", "2025-12-31"),
             ]
             date_ranges = [date_ranges]
@@ -309,6 +310,6 @@ if __name__ == "__main__":
                     epoch_idx = -1
 
                 # trainer = Trainer(8092 * 4, samplers, models)
-                trainer = Trainer(8092, samplers, models)
+                trainer = Trainer(256, samplers, models)
                 # print(epoch_idx, i + 1)
                 trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
