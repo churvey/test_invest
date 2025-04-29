@@ -242,7 +242,7 @@ if __name__ == "__main__":
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 50
+    epoch = 20
     if not use_roller:
         date_ranges = [
             ("2008-01-01", "2023-12-31"),
@@ -278,6 +278,7 @@ if __name__ == "__main__":
     print(date_ranges)
     for data_i in range(len(date_ranges)):
         for model_class in [ RegLSTM , RegDNN, RegTransformer]:
+        # for model_class in [ RegLSTM]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")

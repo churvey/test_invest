@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import cloudpickle
+from numpy.lib.stride_tricks import sliding_window_view
 
 from torch.utils.tensorboard import SummaryWriter
 import datetime
@@ -76,9 +77,17 @@ class RegDNN(Model, nn.Module):
         # 1/0
         self.optimizer.zero_grad()
         y_p = self.forward(x, **data)
+
+        # print("in step")
+        # shapes = {k: v.shape for k, v in data.items()}
+        # print(shapes)
+        # print(y_p.shape)
+
         no_nan = ~torch.isnan(y).reshape([-1, 1])
         y_no_nan = y.reshape([-1, 1])[no_nan]
         y_p_no_nan = y_p.reshape([-1, 1])[no_nan]
+
+        # print(y_no_nan.shape)
 
         loss = self.loss_fn(y_no_nan, y_p_no_nan)
         if is_train:
@@ -157,7 +166,9 @@ class Transformer(nn.Module):
         # src [N, F*T] --> [N, T, F]
         # src = src.reshape(len(src), self.d_feat, -1).permute(0, 2, 1)
 
-        src = src.reshape(len(src), -1, self.d_feat) # [batch_size, instruct_count, feature_dim]
+        src = src.reshape(
+            len(src), -1, self.d_feat
+        )  # [batch_size, instruct_count, feature_dim]
         src = self.feature_layer(src)
 
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
@@ -207,9 +218,16 @@ class RegTransformer(RegDNN):
 
 
 
-
 class LSTMModel(nn.Module):
-    def __init__(self, d_feat=6, hidden_size=64, num_layers=2, dropout=0.0, device="cuda", max_seqlen = 64):
+    def __init__(
+        self,
+        d_feat=6,
+        hidden_size=64,
+        num_layers=2,
+        dropout=0.0,
+        device="cuda",
+        max_seqlen=32,
+    ):
         super().__init__()
         self.device = device
         self.rnn = nn.LSTM(
@@ -225,32 +243,21 @@ class LSTMModel(nn.Module):
 
     def forward(self, x, **kwargs):
         # x: [N, T * F]
-        print("x.shape", x.shape)
-        
-        def unfold(x):
-            x = x.reshape(len(x), -1, self.d_feat)  # [N, T, F]
-            x = x.unfold(1, self.max_seqlen, 1)
-            return x
 
-        x = unfold(x)
-        for k in kwargs.keys():
-            kwargs[k] = unfold(kwargs[k])[:, -1, ...]
-        
-        out, _ = self.rnn(x[:, -1, ...])
-        return self.fc_out(out).squeeze(dim=-1)
+        out, _ = self.rnn(x)
+        return self.fc_out(out[:, -1, ...]).squeeze(dim=-1)
 
 
 class RegLSTM(RegDNN):
 
     def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
         # nn.Module.__init__(self)
-        super(RegLSTM, self).__init__(
-            features, output_dim, device, scheduler_step
-        )
+        super(RegLSTM, self).__init__(features, output_dim, device, scheduler_step)
         self.model = LSTMModel(len(self.features), device=self.device)
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
         )
+        self.max_seqlen = 32
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
             mode="min",
@@ -264,5 +271,42 @@ class RegLSTM(RegDNN):
             eps=1e-08,
         )
 
+    # def step(self, data, step_idx, is_train=False):
+    #     # print("x.shape", x.shape)
+    #     # batch_size = x.shape[0]
+    #     def unfold(x, dim):
+    #         x = x.reshape(len(x), -1, dim)  # [N, T, F]
+    #         # print("x.shape", x.shape)
+    #         x = (
+    #             torch_unfold(x, 1, self.max_seqlen, 1)
+    #             if not isinstance(x, np.ndarray)
+    #             else numpy_unfold(x, 1, self.max_seqlen, 1)
+    #         )
+    #         return x
+
+    #     # x = unfold(x, self.len(self.features))
+    #     for k in data.keys():
+    #         # print(f"k:{k}")
+    #         data[k] = unfold(data[k], 1 if k != "x" else len(self.features))
+
+    #     shapes = {k: v.shape for k, v in data.items()}
+    #     print("shapes", shapes)
+    #     x = data["x"]
+    #     valid = ~torch.any(torch.any(torch.isnan(x), dim=-1), dim=-1)
+    #     # print("valid", valid.shape)
+    #     print("valid count", torch.sum(valid), valid.shape)
+    #     new_data = {
+    #         k: v[valid] if k == "x" else v[valid][:, -1, ...] for k, v in data.items()
+    #     }
+    #     # for i in range(x.shape[1]):
+    #     #     # print(i)
+    #     #     new_data = {
+    #     #         k: v[:, i, ...] if k == "x" else v[:, i, -1, ...] for k, v in data.items()
+    #     #     }
+    #     shapes = {k: v.shape for k, v in new_data.items()}
+    #     print(shapes)
+    #     rs =  super().step(new_data, step_idx, is_train)
+    #     return rs
+
     def forward(self, *args, **kwargs):
-        return self.model.forward(*args, **kwargs)
+        return self.model.forward(**kwargs)
