@@ -157,7 +157,7 @@ class Transformer(nn.Module):
         # src [N, F*T] --> [N, T, F]
         # src = src.reshape(len(src), self.d_feat, -1).permute(0, 2, 1)
 
-        src = src.reshape(len(src), -1, self.d_feat)
+        src = src.reshape(len(src), -1, self.d_feat) # [batch_size, instruct_count, feature_dim]
         src = self.feature_layer(src)
 
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
@@ -203,7 +203,66 @@ class RegTransformer(RegDNN):
         mask = None
         y = kwargs["y_pred"].squeeze(dim=-1)
         mask = torch.isnan(y)
-        # print(y)
-        # print(mask)
-        # 1/0
         return self.model.forward(*args, mask)
+
+
+
+
+class LSTMModel(nn.Module):
+    def __init__(self, d_feat=6, hidden_size=64, num_layers=2, dropout=0.0, device="cuda", max_seqlen = 64):
+        super().__init__()
+        self.device = device
+        self.rnn = nn.LSTM(
+            input_size=d_feat,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+        )
+        self.fc_out = nn.Linear(hidden_size, 1)
+        self.max_seqlen = max_seqlen
+        self.d_feat = d_feat
+
+    def forward(self, x, **kwargs):
+        # x: [N, T * F]
+        print("x.shape", x.shape)
+        
+        def unfold(x):
+            x = x.reshape(len(x), -1, self.d_feat)  # [N, T, F]
+            x = x.unfold(1, self.max_seqlen, 1)
+            return x
+
+        x = unfold(x)
+        for k in kwargs.keys():
+            kwargs[k] = unfold(kwargs[k])[:, -1, ...]
+        
+        out, _ = self.rnn(x[:, -1, ...])
+        return self.fc_out(out).squeeze(dim=-1)
+
+
+class RegLSTM(RegDNN):
+
+    def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
+        # nn.Module.__init__(self)
+        super(RegLSTM, self).__init__(
+            features, output_dim, device, scheduler_step
+        )
+        self.model = LSTMModel(len(self.features), device=self.device)
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=0.002, weight_decay=0.0002
+        )
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode="min",
+            factor=0.5,
+            patience=10,
+            verbose=True,
+            threshold=0.0001,
+            threshold_mode="rel",
+            cooldown=0,
+            min_lr=0.00001,
+            eps=1e-08,
+        )
+
+    def forward(self, *args, **kwargs):
+        return self.model.forward(*args, **kwargs)

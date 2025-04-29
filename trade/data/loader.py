@@ -120,13 +120,12 @@ class QlibDataloader(BaseDataloader):
     def get_stock_params(self):
         d = get_inst(self.path)
         if True:
-            # d2 = get_inst(self.path, "csi300")
-            # keys = d2.keys()
-            keys = list_dir()
+            keys = get_inst(self.path, "csi300").keys()
+            # keys = list_dir()
             d = { k:v for k,v in d.items() if k in keys}
             rs = list(d.items())
             index = np.arange(len(rs))
-            index =  np.random.choice(index, min(10000, len(rs)), replace=False)
+            index =  np.random.choice(index, min(100, len(rs)), replace=False)
             return [rs[i] for i in index]
         #     # return [:50]
         return list(d.items())

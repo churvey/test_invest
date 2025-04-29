@@ -57,6 +57,7 @@ class Sampler:
         self.datetime_np = features["datetime"].to_numpy().reshape(shape)
         self.instrument_np = features["instrument"].to_numpy().reshape(shape)
         self.datetime = np.sort(np.unique(self.datetime_np))
+        self.instrument = np.sort(np.unique(self.instrument_np))
         self.w = self.weight(features)
         self.index = self.init_seed()
 
@@ -139,8 +140,12 @@ class Sampler:
         elif phase == "valid":
             return self.to_numpy(self.sample(int(1e8), i))
         else:
-            date = self.datetime[i]
-            samples = (self.datetime_np.reshape([len(self.datetime_np), -1])[:,-1] == date)
+            if self.seq_col != "datetime":
+                date = self.datetime[i]
+                samples = (self.datetime_np.reshape([len(self.datetime_np), -1])[:,-1] == date)
+            else:
+                ins = self.instrument[i]
+                samples = (self.instrument_np.reshape([len(self.instrument_np), -1])[:,-1] == ins)
             return self.to_numpy(samples)
 
     def iter(self, batch_size, phase="train", ratio=1.0):
@@ -159,7 +164,7 @@ class Sampler:
         elif phase == "valid":
             return 1
         else:
-            return self.datetime.shape[0]
+            return self.datetime.shape[0] if self.seq_col != "datetime" else self.instrument.shape[0]
 
 
 class SamplersCpp(Sampler):
