@@ -87,7 +87,7 @@ class RegDNN(Model, nn.Module):
         y_no_nan = y.reshape([-1, 1])[no_nan]
         y_p_no_nan = y_p.reshape([-1, 1])[no_nan]
 
-        # print(y_no_nan.shape)
+        # print(y_no_nan.shape, "vs", y.shape)
 
         loss = self.loss_fn(y_no_nan, y_p_no_nan)
         if is_train:
@@ -163,12 +163,11 @@ class Transformer(nn.Module):
         self.d_feat = d_feat
 
     def forward(self, src, mask=None):
-        # src [N, F*T] --> [N, T, F]
-        # src = src.reshape(len(src), self.d_feat, -1).permute(0, 2, 1)
-
+        # print(src.shape, "shapes")
         src = src.reshape(
             len(src), -1, self.d_feat
         )  # [batch_size, instruct_count, feature_dim]
+        # print(src.shape, "shapes2")
         src = self.feature_layer(src)
 
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
@@ -257,7 +256,6 @@ class RegLSTM(RegDNN):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
         )
-        self.max_seqlen = 32
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
             mode="min",

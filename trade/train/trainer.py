@@ -108,7 +108,7 @@ class Trainer:
             if is_async:
                 with torch.cuda.stream(self.streams[(i) % len(streams)]):
                     batch = {
-                        k: v.to(self.device, non_blocking=True) if k not in ["datetime", "instrument"] else v
+                        k: torch.asarray(v).to(self.device, non_blocking=True) if k not in ["datetime", "instrument"] else v
                         for k, v in data_i.items()
                     }
                     # if "indices" in batch:
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 20
+    epoch = 10
     if not use_roller:
         date_ranges = [
             ("2008-01-01", "2023-12-31"),
@@ -277,8 +277,9 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     for data_i in range(len(date_ranges)):
-        for model_class in [ RegLSTM , RegDNN, RegTransformer]:
         # for model_class in [ RegLSTM]:
+        for model_class in [RegDNN, RegTransformer ]:
+        # for model_class in [RegTransformer ]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")
@@ -310,7 +311,7 @@ if __name__ == "__main__":
 
                     epoch_idx = -1
 
-                batch_size = 64
+                batch_size = 256
                 # if not seq_col:
                 #     batch_size *= 384
                 # trainer = Trainer(8092 * 4, samplers, models)

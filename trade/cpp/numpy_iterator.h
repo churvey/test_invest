@@ -22,8 +22,8 @@ public:
         size_t cols;
     };
 
-    NumpyDictSampler(py::object data_dict, int batch_size, std::vector<int32_t> indices)
-        : batch_size(batch_size), indices(std::move(indices))
+    NumpyDictSampler(py::object data_dict, int batch_size, std::vector<int32_t> indices, int seqlen)
+        : batch_size(batch_size), indices(std::move(indices)), seqlen(seqlen)
     {
         // 验证字典并提取数组信息
         py::detail::make_caster<ArrayDict> caster;
@@ -61,10 +61,11 @@ public:
     {
     public:
         Iterator(std::map<std::string, ArrayInfo> arrays,
-                 std::vector<int> indices, int batch_size)
+                 std::vector<int> indices, int batch_size, int seqlen)
             : arrays(std::move(arrays)),
               indices(std::move(indices)),
               batch_size(batch_size),
+              seqlen(seqlen),
               rd(),
               gen(rd())
         {
@@ -78,6 +79,7 @@ public:
             : arrays(std::move(other.arrays)),
               indices(std::move(other.indices)),
               batch_size(other.batch_size),
+              seqlen(other.seqlen),
               current(other.current),
               gen(std::move(other.gen))
         {
@@ -110,7 +112,7 @@ public:
                                        .pinned_memory(true);
 
                     batch_dict["indices"] = torch::empty(
-                        {static_cast<int64_t>(end - start)},
+                        {static_cast<int64_t>(end - start) * seqlen},
                         options);
                     indices_data = batch_dict["indices"].data_ptr<int32_t>();
                 }
@@ -121,21 +123,22 @@ public:
                                    .device(torch::kCPU)
                                    .pinned_memory(true);
 
-                torch::Tensor tensor = torch::empty(
-                    {static_cast<int64_t>(end - start),
-                     static_cast<int64_t>(info.cols)},
-                    options);
+                std::vector<int64_t> shape = {end - start, seqlen * info.cols};
+                torch::Tensor tensor = torch::empty(shape, options);
 
                 // 填充数据
                 float *tensor_data = tensor.data_ptr<float>();
                 for (auto it = start; it != end; ++it)
                 {
                     const float *src = info.data_ptr + (*it) * info.cols;
-                    std::memcpy(tensor_data, src, info.cols * sizeof(float));
+                    std::memcpy(tensor_data, src, seqlen * info.cols * sizeof(float));
                     tensor_data += info.cols;
                     if (indices_data)
                     {
-                        *(indices_data++) = *it;
+                        for (size_t s_i = 0; s_i < seqlen; ++s_i)
+                        {
+                            *(indices_data++) = *(it) + s_i;
+                        }
                     }
                 }
                 tensor_data = tensor.data_ptr<float>();
@@ -148,6 +151,7 @@ public:
         std::map<std::string, ArrayInfo> arrays;
         std::vector<int> indices;
         int batch_size;
+        int seqlen;
         size_t current;
         std::random_device rd;
         std::mt19937 gen;
@@ -155,7 +159,7 @@ public:
 
     Iterator __iter__()
     {
-        return Iterator(arrays, indices, batch_size);
+        return Iterator(arrays, indices, batch_size, seqlen);
     }
 
 private:
@@ -163,4 +167,5 @@ private:
     std::vector<int> indices;
     int batch_size;
     float ratio;
+    int seqlen;
 };

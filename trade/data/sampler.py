@@ -55,7 +55,8 @@ class Sampler:
             index_col = [p for p in loader.indices if p != seq_col][0]
             index = features[[index_col]].drop_duplicates()
             indices = index.merge(features[[seq_col]].drop_duplicates(), how="cross")
-            shape = [len(index), -1]
+            # shape = [len(index), -1]
+            
             self.seq_len = len(indices) // len(index)
             features = features.merge(indices, how="right", on=loader.indices)
             features = features.sort_values([index_col, seq_col])
@@ -64,6 +65,7 @@ class Sampler:
                     self._feature_columns
                 ].fillna(0)
             print(features)
+            shape = [len(features), -1]
 
         self.features_np = np.ascontiguousarray(
             features[self._feature_columns].to_numpy(dtype="float32")
@@ -196,9 +198,9 @@ class Sampler:
 
 class SamplersCpp(Sampler):
 
-    def __init__(self, loader, day_range=None, seq_col="instrument"):
+    def __init__(self, loader, day_range=None, seq_col="instrument", max_seqlen= 256):
         super(SamplersCpp, self).__init__(loader, day_range, seq_col)
-        self.max_seqlen = 32
+        self.max_seqlen = max_seqlen
         self.data = {
             "x": self.features_np,
             **{
@@ -226,7 +228,7 @@ class SamplersCpp(Sampler):
                     x = x.reshape(len(x), -1, dim)  # [N, T, F]
                     # print("x.shape", x.shape)
                     x = (
-                        torch_unfold(x, 1, self.max_seqlen, 1)
+                        numpy_unfold(x, 1, self.max_seqlen, 1)
                         if not isinstance(x, np.ndarray)
                         else numpy_unfold(x, 1, self.max_seqlen, 1)
                     )
@@ -238,6 +240,8 @@ class SamplersCpp(Sampler):
                     data[k] = unfold(
                         data[k], 1 if k != "x" else len(self.feature_columns())
                     )
+                    # if k == "datetime" or k == "instrument":
+                    #     print(k, data[k][-1].reshape([-1]))
 
                 shapes = {k: v.shape for k, v in data.items()}
                 print("shapes", shapes)
@@ -254,6 +258,9 @@ class SamplersCpp(Sampler):
                 # print("valid", valid.shape)
                 total_size = np.sum(valid)
                 print("valid count", total_size, valid.shape, batch_size)
+                
+
+                
                 new_data = {
                     k: v[valid] if k == "x" else v[valid][:, -1, ...]
                     for k, v in data.items()
@@ -262,29 +269,42 @@ class SamplersCpp(Sampler):
                     if batch_size == 1:
                         yield new_data
                     else:
-                        for i in range((total_size + batch_size - 1) // batch_size):
+                        # if batch_size < 16 and total_size >= 16:
+                        #     batch_size = 16
+                        for i in range(total_size // batch_size):
                             new_data_i = {
-                                k: v[i * batch_size : (i + 1) * batch_size]
+                                k: v[i * batch_size + total_size % batch_size : (i + 1) * batch_size + total_size % batch_size]
                                 for k, v in new_data.items()
                             }
                             yield new_data_i
 
-        return tqdm(g(), total=iter.total)
+        return tqdm(g(), total=iter.total * len(self.datetime))
 
-    def iter_internal(self, batch_size, phase="train", ratio=1.0):
+    def iter(self, batch_size, phase="train", ratio=1.0):
+        seqlen = 1
         index = np.arange(self.features_np.shape[0])
+        
+        if self.seq_col == "instrument":
+            seqlen = len(self.instrument)
+            index = np.arange(self.datetime.shape[0]) * seqlen
+        elif self.seq_col == "datetime":
+            seqlen = self.max_seqlen
+            index = index[index % len(self.datetime) <= len(self.datetime) - seqlen]
         if phase == "train":
             n = int(index.shape[0] * ratio)
             weight = (np.zeros(index.shape) + 1) * self.w
             weight *= self.label_weight()
             weight /= np.sum(weight)
+            if self.seq_col == "datetime":
+                n = n * len(self.datetime) // (seqlen * len(self.datetime - seqlen))
             index = np.random.choice(index, n, replace=True, p=weight)
         elif phase == "valid":
             batch_size = int(8096 * 16)
             pass
         else:
-            return super(SamplersCpp, self).iter(batch_size, phase, ratio)
-        sampler = trade_cpp.NumpyDictSampler(self.data, batch_size, index.tolist())
+            batch_size = int(8096 * 16)
+        #     return super(SamplersCpp, self).iter(batch_size, phase, ratio)
+        sampler = trade_cpp.NumpyDictSampler(self.data, batch_size, index.tolist(), seqlen)
 
         def sample():
             for data in sampler:
@@ -295,8 +315,8 @@ class SamplersCpp(Sampler):
                     "instrument": self.instrument_np[indices],
                     **data,
                 }
+        total_len = (len(index) + batch_size - 1 // batch_size)
+        return tqdm(sample(), total=total_len)
 
-        return tqdm(sample(), total=self.len(batch_size, phase, ratio))
-
-    def iter(self, batch_size, phase="train", ratio=1.0):
-        return self.wrapper_iter(self.iter_internal(batch_size, phase, ratio))
+    # def iter(self, batch_size, phase="train", ratio=1.0):
+    #     return self.wrapper_iter(self.iter_internal(batch_size, phase, ratio))
