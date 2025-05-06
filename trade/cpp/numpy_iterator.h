@@ -132,7 +132,7 @@ public:
                 {
                     const float *src = info.data_ptr + (*it) * info.cols;
                     std::memcpy(tensor_data, src, seqlen * info.cols * sizeof(float));
-                    tensor_data += info.cols;
+                    tensor_data += info.cols * seqlen;
                     if (indices_data)
                     {
                         for (size_t s_i = 0; s_i < seqlen; ++s_i)
@@ -141,7 +141,7 @@ public:
                         }
                     }
                 }
-                tensor_data = tensor.data_ptr<float>();
+                // tensor_data = tensor.data_ptr<float>();
                 batch_dict[pair.first.c_str()] = tensor;
             }
             return batch_dict;

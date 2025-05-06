@@ -315,7 +315,7 @@ class SamplersCpp(Sampler):
                     "instrument": self.instrument_np[indices],
                     **data,
                 }
-        total_len = (len(index) + batch_size - 1 // batch_size)
+        total_len = (len(index) + batch_size - 1) // batch_size
         return tqdm(sample(), total=total_len)
 
     # def iter(self, batch_size, phase="train", ratio=1.0):
