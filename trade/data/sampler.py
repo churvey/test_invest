@@ -296,7 +296,7 @@ class SamplersCpp(Sampler):
             weight *= self.label_weight()
             weight /= np.sum(weight)
             if self.seq_col == "datetime":
-                n = n * len(self.datetime) // (seqlen * len(self.datetime - seqlen))
+                n = n * len(self.datetime) // (seqlen * len(self.datetime) - seqlen)
             index = np.random.choice(index, n, replace=True, p=weight)
         elif phase == "valid":
             batch_size = int(8096 * 16)

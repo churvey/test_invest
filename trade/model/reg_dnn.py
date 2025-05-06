@@ -242,7 +242,9 @@ class LSTMModel(nn.Module):
 
     def forward(self, x, **kwargs):
         # x: [N, T * F]
-
+        x = x.reshape(
+            len(x), -1, self.d_feat
+        )  # [batch_size, datetime_count, feature_dim]
         out, _ = self.rnn(x)
         return self.fc_out(out[:, -1, ...]).squeeze(dim=-1)
 

@@ -277,8 +277,8 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     for data_i in range(len(date_ranges)):
-        # for model_class in [ RegLSTM]:
-        for model_class in [RegDNN, RegTransformer ]:
+        for model_class in [ RegLSTM]:
+        # for model_class in [RegDNN, RegTransformer ]:
         # for model_class in [RegTransformer ]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
