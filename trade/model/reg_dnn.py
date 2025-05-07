@@ -61,6 +61,7 @@ class RegDNN(Model, nn.Module):
         self.device = device
         self.metrics = {
             "pcorr": PearsonCorrCoef().to(self.device),
+            "scorr":SpearmanCorrCoef().to(self.device),
             "mae": MeanAbsoluteError().to(self.device),
             "mse": MeanSquaredError().to(self.device),
             "r2": R2Score().to(self.device),
@@ -75,7 +76,8 @@ class RegDNN(Model, nn.Module):
         y = data["y_pred"]
         # print(x.shape, y.shape)
         # 1/0
-        self.optimizer.zero_grad()
+        if is_train:
+            self.optimizer.zero_grad()
         y_p = self.forward(x, **data)
 
         # print("in step")
@@ -298,3 +300,40 @@ class RegLSTM(RegDNN):
 
     def forward(self, *args, **kwargs):
         return self.model.forward(**kwargs)
+    
+    
+class AVG(RegDNN):
+
+    def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
+        # nn.Module.__init__(self)
+        super(AVG, self).__init__(features, output_dim, device, scheduler_step)
+        self.values = None
+   
+    def step(self, data, step_idx, is_train=False):
+        # {'datetime': (65536, 1), 'instrument': (65536, 1), 'x': torch.Size([256, 38144]), 'y_pred': torch.Size([256, 256])}
+        
+        # new_data = {
+        #     k: v[valid] if k == "x" else v[valid][:, -1, ...] for k, v in data.items()
+        # }
+        # for i in range(x.shape[1]):
+        #     # print(i)
+        #     new_data = {
+        #         k: v[:, i, ...] if k == "x" else v[:, i, -1, ...] for k, v in data.items()
+        #     }
+        # shapes = {k: v.shape for k, v in data.items()}
+        # print("step shapes", shapes)
+        rs =  super().step(data, step_idx, False)
+        y = data["y_pred"]
+        if self.values is None:
+            self.values = y.reshape([-1])
+        else:
+            self.values = torch.cat([self.values, y.reshape([-1])])
+        return rs
+
+    def forward(self, *args, **kwargs):
+        # shape = kwargs["y_pred"].shape
+        zero = torch.zeros_like(kwargs["y_pred"]) 
+        # m =  torch.nanmean(self.values)  else 0
+        if self.values is not None:
+            return zero + torch.nanmean(self.values)
+        return zero

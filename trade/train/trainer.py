@@ -10,7 +10,7 @@ import datetime
 
 from trade.data.loader import QlibDataloader, FtDataloader
 from trade.data.sampler import *
-from trade.model.reg_dnn import RegDNN, RegTransformer ,RegLSTM
+from trade.model.reg_dnn import RegDNN, RegTransformer ,RegLSTM, AVG
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
 import numpy as np
@@ -278,8 +278,8 @@ if __name__ == "__main__":
     print(date_ranges)
     for data_i in range(len(date_ranges)):
         # for model_class in [ RegLSTM]:
-        for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-        # for model_class in [RegDNN ]:
+        # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
+        for model_class in [AVG, RegDNN]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")

@@ -25,7 +25,7 @@ def torch_unfold(x, dim, size, step):
 
 class Sampler:
 
-    def __init__(self, loader, day_range=None, seq_col="instrument", max_seqlen=250):
+    def __init__(self, loader, day_range=None, seq_col="instrument", max_seqlen=64):
         print(f"loader features:{len(loader.features)}")
         self.label_name = "y_pred"
         features = loader.features
@@ -206,7 +206,7 @@ class Sampler:
 
 class SamplersCpp(Sampler):
 
-    def __init__(self, loader, day_range=None, seq_col="instrument", max_seqlen= 256):
+    def __init__(self, loader, day_range=None, seq_col="instrument", max_seqlen= 64):
         super(SamplersCpp, self).__init__(loader, day_range, seq_col, max_seqlen)
         
         self.data = {
@@ -240,15 +240,15 @@ class SamplersCpp(Sampler):
             sum_2 = np.sum(no_nan)
             index = index[valid_seq & no_nan]
             print(f"valid index {len(index)} vs {len(self.features_np)} {sum_1} vs {sum_2}")
-            
+            # 300442 3891
             
         if phase == "train":
             n = int(index.shape[0] * ratio)
             weight = (np.zeros(index.shape) + 1) * self.w
             weight *= self.label_weight()
             weight /= np.sum(weight)
-            # if self.seq_col == "datetime":
-            #     n = n * len(self.datetime) // (seqlen * len(self.datetime) - seqlen)
+            if self.seq_col == "datetime":
+                n = n * len(self.datetime) // (seqlen * len(self.datetime) - seqlen)
             index = np.random.choice(index, n, replace=True, p=weight)
             print(f"train with n {n} samples")
         # elif phase == "valid":
