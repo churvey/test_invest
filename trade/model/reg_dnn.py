@@ -224,8 +224,7 @@ class LSTMModel(nn.Module):
         hidden_size=64,
         num_layers=2,
         dropout=0.0,
-        device="cuda",
-        max_seqlen=32,
+        device="cuda"
     ):
         super().__init__()
         self.device = device
@@ -237,17 +236,20 @@ class LSTMModel(nn.Module):
             dropout=dropout,
         )
         self.fc_out = nn.Linear(hidden_size, 1)
-        self.max_seqlen = max_seqlen
         self.d_feat = d_feat
 
     def forward(self, x, **kwargs):
         # x: [N, T * F]
-        x = x.reshape(
-            len(x), -1, self.d_feat
-        )  # [batch_size, datetime_count, feature_dim]
+        # x = x.reshape(
+        #     len(x), -1, self.d_feat
+        # )  # [batch_size, datetime_count, feature_dim]
+        assert not torch.isnan(x).any(), x
         out, _ = self.rnn(x)
-        return self.fc_out(out[:, -1, ...]).squeeze(dim=-1)
-
+        assert not torch.isnan(out).any(), out
+        y =  self.fc_out(out[:, -1, ...])
+        assert not torch.isnan(y).any(), y
+        
+        return y
 
 class RegLSTM(RegDNN):
 
@@ -271,42 +273,28 @@ class RegLSTM(RegDNN):
             eps=1e-08,
         )
 
-    # def step(self, data, step_idx, is_train=False):
-    #     # print("x.shape", x.shape)
-    #     # batch_size = x.shape[0]
-    #     def unfold(x, dim):
-    #         x = x.reshape(len(x), -1, dim)  # [N, T, F]
-    #         # print("x.shape", x.shape)
-    #         x = (
-    #             torch_unfold(x, 1, self.max_seqlen, 1)
-    #             if not isinstance(x, np.ndarray)
-    #             else numpy_unfold(x, 1, self.max_seqlen, 1)
-    #         )
-    #         return x
-
-    #     # x = unfold(x, self.len(self.features))
-    #     for k in data.keys():
-    #         # print(f"k:{k}")
-    #         data[k] = unfold(data[k], 1 if k != "x" else len(self.features))
-
-    #     shapes = {k: v.shape for k, v in data.items()}
-    #     print("shapes", shapes)
-    #     x = data["x"]
-    #     valid = ~torch.any(torch.any(torch.isnan(x), dim=-1), dim=-1)
-    #     # print("valid", valid.shape)
-    #     print("valid count", torch.sum(valid), valid.shape)
-    #     new_data = {
-    #         k: v[valid] if k == "x" else v[valid][:, -1, ...] for k, v in data.items()
-    #     }
-    #     # for i in range(x.shape[1]):
-    #     #     # print(i)
-    #     #     new_data = {
-    #     #         k: v[:, i, ...] if k == "x" else v[:, i, -1, ...] for k, v in data.items()
-    #     #     }
-    #     shapes = {k: v.shape for k, v in new_data.items()}
-    #     print(shapes)
-    #     rs =  super().step(new_data, step_idx, is_train)
-    #     return rs
+    def step(self, data, step_idx, is_train=False):
+        # {'datetime': (65536, 1), 'instrument': (65536, 1), 'x': torch.Size([256, 38144]), 'y_pred': torch.Size([256, 256])}
+        new_data = {
+            k:v.reshape([len(v), -1, 1])[:,-1,:] if k != "x" else v.reshape([len(v), -1, len(self.features)]) for k,v in data.items()
+        }
+        for k in new_data.keys():
+            data[k] = new_data[k]
+            if k == "x":
+                data[k] = torch.nan_to_num(data[k])
+                assert not torch.isnan(data[k]).any(), data[k]
+        # new_data = {
+        #     k: v[valid] if k == "x" else v[valid][:, -1, ...] for k, v in data.items()
+        # }
+        # for i in range(x.shape[1]):
+        #     # print(i)
+        #     new_data = {
+        #         k: v[:, i, ...] if k == "x" else v[:, i, -1, ...] for k, v in data.items()
+        #     }
+        # shapes = {k: v.shape for k, v in data.items()}
+        # print("step shapes", shapes)
+        rs =  super().step(data, step_idx, is_train)
+        return rs
 
     def forward(self, *args, **kwargs):
         return self.model.forward(**kwargs)

@@ -142,7 +142,7 @@ class Trainer:
             saved = from_cache(f"{save_name}/predict.pkl")
             if saved is not None:
                 save_pd.append(saved)
-            save_pd = pd.concat(save_pd)
+            save_pd = pd.concat(save_pd).sort_values(["datetime", "instrument"]).reset_index(drop=True)
             print("save result", len(save_pd))
             print(save_pd)
             save_cache(f"{save_name}/predict.pkl", save_pd)
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 10
+    epoch = 20
     if not use_roller:
         date_ranges = [
             ("2008-01-01", "2023-12-31"),
@@ -277,9 +277,9 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     for data_i in range(len(date_ranges)):
-        for model_class in [ RegLSTM]:
-        # for model_class in [RegDNN, RegTransformer ]:
-        # for model_class in [RegTransformer ]:
+        # for model_class in [ RegLSTM]:
+        for model_class in [RegDNN, RegTransformer,RegLSTM ]:
+        # for model_class in [RegDNN ]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")
