@@ -132,10 +132,10 @@ class QlibDataloader(BaseDataloader):
             # print(inst["SH600811"], end, "SH600811" in keys)
             # 1/0
             
-            # keys = list_dir()
+            keys = list_dir()
             d = { k:v for k,v in d.items() if k in keys}
             rs = list(d.items())
-            index = np.arange(len(rs))[:100]
+            index = np.arange(len(rs))
             # index =  np.random.choice(index, min(100, len(rs)), replace=False)
             rs =  [rs[i] for i in index]
             print("selected stocks", rs)
@@ -208,8 +208,12 @@ class FtDataloader(BaseDataloader):
     
 
     def get_stock_params(self):
+        inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
+        print(inst)
+        
         files = os.listdir(self.path)
-        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in inst]
+        print(f"{len(files)} vs {len(params)}")
         return params
 
     def get_stock_features(self, path):

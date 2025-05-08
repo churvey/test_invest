@@ -104,12 +104,12 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
-# def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
-def plot_pred(save_names = ["RegDNN"]):
+def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
+# def plot_pred(save_names = ["RegDNN"]):
     with Context() as ctx:
         preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
         
-        if len(save_names) > 1:
+        if len(save_names) > 10:
             pred = preds[0].copy()
             
             direct = (preds[1]["y"] * preds[0]["y"] > 0)
@@ -127,12 +127,12 @@ def plot_pred(save_names = ["RegDNN"]):
         
         fig, axs = plt.subplots(2, 2, figsize=(10, 8))
         
-        for idx, pred in enumerate(preds):
+        for idx, pred1 in enumerate(preds):
             
             
-            print(pred[pred["y"].isna()])
+            # print(pred[pred["y"].isna()])
             
-            pred = pred.dropna()
+            pred = pred1.dropna()
             
             top_n = pred.groupby('datetime').apply(
                 lambda x: x.sort_values('y_p', ascending=False).head(5)
@@ -214,7 +214,7 @@ def plot_pred(save_names = ["RegDNN"]):
             axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
             
         # plt.grid(True)
-        plt.show()
+        # plt.show()
     
     
 

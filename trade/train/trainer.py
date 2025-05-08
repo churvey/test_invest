@@ -176,10 +176,11 @@ class Trainer:
             self.run_phase("predict", save_name=save_name)
 
 
-def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument"):
-    loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
+def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument", loader = None):
+    if not loader:
+        loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    # loader = FtDataloader("tmp", [label_gen])
+    # loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
@@ -213,20 +214,20 @@ if __name__ == "__main__":
         l = data["close"].shape[0]
         pred = np.concatenate(
                 [
-                    (data["open"][1:] / data["close"][:-1] - 1) * 100,
-                    [float("nan")] * 1,
+                    (data["open"][2:] / data["open"][1:-1] - 1) * 100,
+                    [float("nan")] * 2,
                 ]
         )[:l]
         
         inc = np.concatenate(
                 [
+                    (data["open"][1:] / data["close"][:-1] - 1) * 100,
                     [float("nan")] * 1,
-                    (data["close"][1:] / data["close"][:-1] - 1) * 100,
-                   
                 ]
         )[:l]
         # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
-        valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
+        # valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
+        valid = (inc <= 0.098 * 100) # 去掉涨停板
         pred[~valid] = float("nan")
         
         # print(f'valid {valid.sum()} vs {len(valid)}' )
@@ -291,7 +292,7 @@ if __name__ == "__main__":
     for data_i in range(len(date_ranges)):
         # for model_class in [ RegLSTM]:
         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-        for model_class in [RegDNN, RegTransformer, RegLSTM]:
+        for model_class in [RegDNN, RegTransformer]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")
@@ -323,7 +324,7 @@ if __name__ == "__main__":
 
                     epoch_idx = -1
 
-                batch_size = 256
+                batch_size = 64
                 # if not seq_col:
                 #     batch_size *= 384
                 # trainer = Trainer(8092 * 4, samplers, models)

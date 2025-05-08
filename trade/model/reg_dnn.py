@@ -61,7 +61,7 @@ class RegDNN(Model, nn.Module):
         self.device = device
         self.metrics = {
             "pcorr": PearsonCorrCoef().to(self.device),
-            "scorr":SpearmanCorrCoef().to(self.device),
+            # "scorr":SpearmanCorrCoef().to(self.device),
             "mae": MeanAbsoluteError().to(self.device),
             "mse": MeanSquaredError().to(self.device),
             "r2": R2Score().to(self.device),
