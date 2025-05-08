@@ -104,30 +104,35 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
-def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
+# def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
+def plot_pred(save_names = ["RegDNN"]):
     with Context() as ctx:
         preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
         
-        pred = preds[0].copy()
-        
-        direct = (preds[1]["y"] * preds[0]["y"] > 0)
-        pred["y"] = ((preds[1]["y"] + preds[0]["y"]) / 2)
-        
-        pred = pred[direct]
-        
-        save_names.append("mix_0")
-        preds.append(pred)
+        if len(save_names) > 1:
+            pred = preds[0].copy()
+            
+            direct = (preds[1]["y"] * preds[0]["y"] > 0)
+            pred["y"] = ((preds[1]["y"] + preds[0]["y"]) / 2)
+            
+            pred = pred[direct]
+            
+            save_names.append("mix_0")
+            preds.append(pred)
         
         # pred = preds[1].copy()
         # pred["y"] = preds[0]["y_p"]
         # save_names.append("mix_1")
         # preds.append(pred)
         
-        fig, axs = plt.subplots(len(preds), 2, figsize=(10, 8))
+        fig, axs = plt.subplots(2, 2, figsize=(10, 8))
         
         for idx, pred in enumerate(preds):
             
             
+            print(pred[pred["y"].isna()])
+            
+            pred = pred.dropna()
             
             top_n = pred.groupby('datetime').apply(
                 lambda x: x.sort_values('y_p', ascending=False).head(5)
@@ -140,6 +145,7 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
                 "d_sig top_n", d_sig / len(labels_t)
             )
             
+            # print(top_n)
             
             labels = pred["y"].to_numpy()
             preds = pred["y_p"].to_numpy()
@@ -156,15 +162,20 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
             )
             
             q_rs = []
-            for q in [0.75, 0.85, 0.95, 0.99, 0.995, 0.999]:
+            qs = [0.75, 0.85, 0.95, 0.99, 0.995, 0.999]
+            for q in qs:
                 q_v = np.quantile(preds, q)
                 select = preds >= q_v
                 d_sig = np.sum(labels[select] * preds[select] > 0)
                 # d_sig_n = np.sum(labels[select] * preds[select] < 0)
                 
+                if q == qs[-1]:
+                    print(pred[select])
+                
                 d_sig_2 = np.sum(labels[select] >= 1.0 )
+                sum_label = np.sum(labels[select]) / len(labels[select])
                 print(
-                    f"d_sig:{d_sig / len(labels[select])} {d_sig_2/ len(labels[select])} q:{q}, q_v{q_v}"
+                    f"d_sig:{d_sig / len(labels[select]):.3f} {d_sig_2/ len(labels[select]):.3f} q:{q:.3f}, q_v{q_v:.3f} sum_label {sum_label:.3f}"
                 )
                 q_rs.append(
                     [labels[select] , preds[select]]

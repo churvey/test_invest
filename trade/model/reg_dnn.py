@@ -245,11 +245,11 @@ class LSTMModel(nn.Module):
         # x = x.reshape(
         #     len(x), -1, self.d_feat
         # )  # [batch_size, datetime_count, feature_dim]
-        assert not torch.isnan(x).any(), x
+        # assert not torch.isnan(x).any(), x
         out, _ = self.rnn(x)
-        assert not torch.isnan(out).any(), out
+        # assert not torch.isnan(out).any(), out
         y =  self.fc_out(out[:, -1, ...])
-        assert not torch.isnan(y).any(), y
+        # assert not torch.isnan(y).any(), y
         
         return y
 
@@ -328,12 +328,17 @@ class AVG(RegDNN):
             self.values = y.reshape([-1])
         else:
             self.values = torch.cat([self.values, y.reshape([-1])])
+        self.values = self.values[~torch.isnan(self.values)]
+        self.values = self.values[:8096 * 16]
         return rs
 
     def forward(self, *args, **kwargs):
         # shape = kwargs["y_pred"].shape
-        zero = torch.zeros_like(kwargs["y_pred"]) 
-        # m =  torch.nanmean(self.values)  else 0
         if self.values is not None:
-            return zero + torch.nanmean(self.values)
-        return zero
+            # return zero + torch.nanmean(self.values)
+            return torch.normal(
+                mean = self.values.mean(), std = self.values.std(),
+                size = kwargs["y_pred"].shape,
+                device = self.device
+            )
+        return torch.zeros_like(kwargs["y_pred"]) 

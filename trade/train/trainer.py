@@ -85,10 +85,11 @@ class Trainer:
                             pd.DataFrame.from_dict({
                                 "instrument":data["instrument"].reshape([-1]),
                                 "datetime":data["datetime"].reshape([-1]),
+                                "y_inc":data["y_inc"].cpu().numpy().reshape([-1]),
                                 "y":y.detach().cpu().numpy().reshape([-1]),
                                 "y_p":y_p.detach().cpu().numpy().reshape([-1]),
                                 }
-                            ).dropna()
+                            )
                         )
                         
 
@@ -217,18 +218,29 @@ if __name__ == "__main__":
                 ]
         )[:l]
         
+        inc = np.concatenate(
+                [
+                    [float("nan")] * 1,
+                    (data["close"][1:] / data["close"][:-1] - 1) * 100,
+                   
+                ]
+        )[:l]
         # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
-        valid = (np.abs(pred) <= 0.098 * 100)
-        pred = pred[valid]
+        valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
+        pred[~valid] = float("nan")
         
-        for k in data.keys():
-            data[k] = data[k][valid]            
+        # print(f'valid {valid.sum()} vs {len(valid)}' )
+        # 1/0
+        
+        # for k in data.keys():
+        #     data[k] = data[k][valid]            
         
         return {
             # "pred": np.concatenate(
             #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
             # )[:l],
             "pred": pred,
+            "inc": inc,
             # "pred": np.concatenate(
             #     [np.log(data["open"] / data["close"]), []]
             # )[:l],
@@ -279,7 +291,7 @@ if __name__ == "__main__":
     for data_i in range(len(date_ranges)):
         # for model_class in [ RegLSTM]:
         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-        for model_class in [AVG, RegDNN]:
+        for model_class in [RegDNN, RegTransformer, RegLSTM]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")

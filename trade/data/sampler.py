@@ -79,7 +79,10 @@ class Sampler:
             features[self._feature_columns].to_numpy(dtype="float32")
         ).reshape(shape)
         print("features_np", self.features_np.shape)
-        self.label_np = features[loader.labels].to_numpy(dtype="float32").reshape(shape)
+        # self.label_np = features[loader.labels].to_numpy(dtype="float32").reshape(shape)
+        self.label_nps = {
+            l: features[l].to_numpy(dtype="float32").reshape(shape) for l in self.labels
+        }
         self.datetime_np = features["datetime"].to_numpy().reshape(shape)
         self.instrument_np = features["instrument"].to_numpy().reshape(shape)
         self.datetime = np.sort(np.unique(self.datetime_np))
@@ -91,12 +94,13 @@ class Sampler:
         return self._feature_columns
 
     def label_weight(self):
-        label = self.label_np[:, self.labels.index(self.label_name)]
+        # label = self.label_np[:, self.labels.index(self.label_name)]
+        label = self.label_nps[self.label_name]
         if "cls" in self.label_name:
             # label = self.label_np[:, self.labels.index(label)]
             label_unique = np.sort(np.unique(label))
             weight = {
-                l: math.sqrt(1 - (label == l).sum() / self.label_np.shape[0])
+                l: math.sqrt(1 - (label == l).sum() / label.shape[0])
                 for l in label_unique
             }
             weight_s = np.zeros_like(label)
@@ -148,10 +152,10 @@ class Sampler:
             "datetime": self.datetime_np[index, ...],
             "instrument": self.instrument_np[index, ...],
             **{
-                self.labels[i]: self.label_np[
-                    index, ..., i * self.seq_len : (i + 1) * self.seq_len
+                i: self.label_nps[i][
+                    index, ...
                 ]
-                for i in range(len(self.labels))
+                for i in self.labels
             },
         }
 
@@ -211,13 +215,10 @@ class SamplersCpp(Sampler):
         
         self.data = {
             "x": self.features_np,
-            **{
-                self.labels[i]: np.ascontiguousarray(
-                    self.label_np[:, i * self.seq_len : (i + 1) * self.seq_len]
-                )
-                for i in range(len(self.labels))
-            },
+            **self.label_nps,
         }
+        
+        print("self.data", {k:v.shape for k,v in self.data.items()})
 
     
 
