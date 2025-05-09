@@ -21,9 +21,10 @@ def get_inst(path, type="all"):
     sorted_keys = sorted(list(ins.keys()))
     return {k: ins[k] for k in sorted_keys}
 
-def list_dir(path = "./data/K_1M"):
+def list_dir(path = "./qmt"):
     files = os.listdir(path)
-    files = [f.split("-")[0].replace(".", "") for f in files]
+    # files = [f.split("-")[0].replace(".", "") for f in files]
+    files = ["".join(f.split(".")[:2][::-1]).replace(".", "") for f in files]
     return files
 
 
@@ -132,7 +133,11 @@ class QlibDataloader(BaseDataloader):
             # print(inst["SH600811"], end, "SH600811" in keys)
             # 1/0
             
-            # keys = list_dir()
+            keys = list_dir()
+            keys = set(keys).intersection(set(d.keys()))
+            keys = sorted(list(keys), key=lambda x:x[2:])[:100]
+            
+            
             d = { k:v for k,v in d.items() if k in keys}
             rs = list(d.items())
             index = np.arange(len(rs))
@@ -211,16 +216,17 @@ class FtDataloader(BaseDataloader):
         # inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
         # print(inst)
         
-        inst  = get_inst(os.path.expanduser("~/output/qlib_bin"), "csi300")
+        inst  = get_inst(os.path.expanduser("~/output/qlib_bin"))
         keys = inst.keys()
-        end = max([
-            v[-1] for v in inst.values()
-        ])
         keys = [
-            k[2:] for k,v in inst.items() if v[-1] == end
-        ][:100]
-        
+            k[2:] for k,v in inst.items()
+        ]
         files = os.listdir(self.path)
+        file_keys = [p[:6] for p in files if p.endswith(".csv")]
+        keys = set(keys).intersection(set(file_keys))
+        keys = sorted(list(keys))[:100]
+        
+        
         params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in keys]
         print(f"{len(files)} vs {len(params)}")
         return params
@@ -233,6 +239,12 @@ class FtDataloader(BaseDataloader):
         columns_rename = "instrument,datetime,open,close,high,low,volume,change".split(",")
         df = df[columns]
         df.columns = columns_rename
+        
+        # volume == 0
+        no_valid = df["volume"] == 0
+        for k in "open,close,high,low,volume,change".split(","):
+            # df[k][no_valid] = float("nan")
+            df.loc[no_valid, k] = float('nan')
         data = {k: df[k].to_numpy() for k in df.columns}
         data = self.add_columns(data)
         return data

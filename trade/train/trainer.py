@@ -178,9 +178,9 @@ class Trainer:
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument", loader = None):
     if not loader:
-        # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
+        loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        loader = FtDataloader("./qmt", [label_gen])
+        # loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
@@ -259,9 +259,9 @@ if __name__ == "__main__":
     if not use_roller:
         date_ranges = [
             ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-12-31"),
+            ("2024-01-01", "2025-03-13"),
             # ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-12-31"),
+            ("2024-01-01", "2025-03-13"),
         ]
         date_ranges = [date_ranges]
     else:
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     for data_i in range(len(date_ranges)):
         # for model_class in [ RegLSTM]:
         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-        for model_class in [RegDNN, RegTransformer]:
+        for model_class in [RegDNN]:
             save_name = str(model_class.__name__.split(".")[-1])
             with Context() as ctx:
                 saved_models = from_cache(f"{save_name}/models.pkl")

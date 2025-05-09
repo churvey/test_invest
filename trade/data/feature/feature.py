@@ -230,10 +230,10 @@ class Feature:
             data[f"{name}_{i}"] = val
 
     def ma(self, data):
-        return self.__rolling__(data, "ma", np.nanmean, func2 = None)
+        return self.__rolling__(data, "ma", np.nanmean)
 
     def std(self, data):
-        return self.__rolling__(data, "std", np.nanstd, func2 = None)
+        return self.__rolling__(data, "std", np.nanstd)
 
     def max(self, data):
         return self.__rolling__(data, "max", np.nanmax, "high")
@@ -297,7 +297,7 @@ class Feature:
         def _get(n="high"):
             # high = np.concatenate([[float("nan")], data[n][:-1]])
             # high = np.maximum(data[n], high)
-            return data[n]
+            return data[n] / data["close"]
             # return high
 
         high = _get()
