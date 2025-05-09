@@ -178,9 +178,9 @@ class Trainer:
 
 def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument", loader = None):
     if not loader:
-        loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
+        # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    # loader = FtDataloader("./qmt", [label_gen])
+        loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
@@ -289,6 +289,7 @@ if __name__ == "__main__":
             get(date_ranges[j], i) for j in range(len(date_ranges))
         ]  for i in range(epoch) ]
     print(date_ranges)
+    exp = "s2"
     for data_i in range(len(date_ranges)):
         # for model_class in [ RegLSTM]:
         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
@@ -316,7 +317,7 @@ if __name__ == "__main__":
                     models = {}
 
                     for i in schedule:
-                        model_name = f"s2_{i}_{save_name}"
+                        model_name = f"{exp}_{i}_{save_name}"
                         models[model_name] = model_class(
                             samplers[stages[0]].feature_columns(),
                             scheduler_step=i,

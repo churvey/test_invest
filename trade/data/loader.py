@@ -127,12 +127,12 @@ class QlibDataloader(BaseDataloader):
             ])
             keys = [
                 k for k,v in inst.items() if v[-1] == end
-            ]
+            ][:100]
             
             # print(inst["SH600811"], end, "SH600811" in keys)
             # 1/0
             
-            keys = list_dir()
+            # keys = list_dir()
             d = { k:v for k,v in d.items() if k in keys}
             rs = list(d.items())
             index = np.arange(len(rs))
@@ -208,11 +208,20 @@ class FtDataloader(BaseDataloader):
     
 
     def get_stock_params(self):
-        inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
-        print(inst)
+        # inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
+        # print(inst)
+        
+        inst  = get_inst(os.path.expanduser("~/output/qlib_bin"), "csi300")
+        keys = inst.keys()
+        end = max([
+            v[-1] for v in inst.values()
+        ])
+        keys = [
+            k[2:] for k,v in inst.items() if v[-1] == end
+        ][:100]
         
         files = os.listdir(self.path)
-        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in inst]
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in keys]
         print(f"{len(files)} vs {len(params)}")
         return params
 
