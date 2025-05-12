@@ -140,8 +140,8 @@ class RegDNN(Model, nn.Module):
 class Transformer(nn.Module):
     def __init__(
         self,
-        d_feat=6,
-        d_model=8,
+        d_feat=128,
+        d_model=64,
         nhead=4,
         dim_feedforward=256,
         num_layers=2,
@@ -160,7 +160,10 @@ class Transformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             self.encoder_layer, num_layers=num_layers
         )
-        self.decoder_layer = nn.Linear(d_model, 1)
+        
+        Net(d_feat, d_model, layers=(512, 256))
+        
+        self.decoder_layer = nn.Linear(2 * d_model, 1)
         self.device = device
         self.d_feat = d_feat
 

@@ -104,6 +104,64 @@ def plot_label(label_gen):
     plt.grid(True, alpha=0.3)
     plt.show()
     
+
+def select_inst():
+    with Context() as ctx:
+        
+        # valid_stocks = None
+        
+        test_ins = ["BJ872374"]
+        
+        insts_map = {"mae":[], "corr":[], "profit":[]}
+        for i in range(50):
+            df = from_cache(f"RegDNN_s2_{i}/predict.pkl")
+            if df is not None:
+                # print(i, len(df))
+                df["mae"] = (
+                    (df["y"] - df["y_p"]) / (df["y"] + 1e-8)
+                ).abs()
+                # if valid_stocks is None:
+                max_date = df[~df["y"].isna()]["datetime"].max()
+                # print(df[df["instrument"] == "SZ300495"])
+                # print("max_date", max_date)
+                valid_stocks = df[(df["datetime"] == max_date) & (~df["y"].isna())]["instrument"].to_list()
+                corr = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument")[["y", "y_p"]].corr().loc[(slice(None), "y_p"), "y"].reset_index()[["instrument", "y"]]
+                
+                yp90 = df[df['instrument'].isin(valid_stocks)].dropna()["y_p"].to_numpy()
+                yp90 = np.quantile(yp90, 0.9)
+                print("yp90", yp90)
+                profit = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument").apply(
+                    lambda x: x[x['y_p'] >= yp90]["y"].sum()
+                ).to_frame(name="profit").reset_index().sort_values(["profit"], ascending=False)
+                
+                # print(profit)
+                
+                # print()
+                # df = df[df["instrument"].isin(valid_stocks)]
+                corr = corr.sort_values(["y"], ascending=False)
+                corr.columns = ["instrument", "corr"]
+                # print(corr)
+                mae = df.groupby('instrument')["mae"].mean().to_frame(name="mae").reset_index().sort_values(["mae"])
+                mae = mae[mae['instrument'].isin(valid_stocks)]
+                
+                # print(mae)
+                insts_map["mae"].append(mae)
+                insts_map["corr"].append(corr)
+                insts_map["profit"].append(profit)
+        
+        for k, insts in insts_map.items():
+            for i in insts:
+                print(i[i["instrument"].isin(test_ins)])
+            
+            # insts = [p.head(10) for p in insts]
+            insts = pd.concat(insts).sort_values(k)
+            # print(insts[insts["instrument"].isin(test_ins)])
+            insts = insts.groupby('instrument')[k].min().to_frame(name=k).reset_index().sort_values([k], ascending=(k == "mae")).reset_index(drop=True).head(100)
+            print(insts)
+            insts.to_csv(f"{k}.csv")
+        
+    
+    
 def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
 # def plot_pred(save_names = ["RegDNN"]):
     with Context() as ctx:
@@ -245,16 +303,5 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
     
 if __name__ == "__main__":
     # plot_label(label_gen)
-    plot_pred()
-    # plot_pred("RegDNN")
-    # plot_pred("RegTransformer")
-    # def get_pred(save_name):
-    #     with Context() as ctx:
-    #         pred = from_cache(f"{save_name}/predict.pkl")
-    #         return pred
-    # p1 = get_pred("RegDNN")
-    # p2 = get_pred("RegTransformer")
-    
-    # dd = pd.merge(p1, p2, how="outer", on=["datetime", "instrument"], sort=True)
-    
-    # print(dd)
+    # plot_pred()
+    select_inst()

@@ -289,46 +289,49 @@ if __name__ == "__main__":
             get(date_ranges[j], i) for j in range(len(date_ranges))
         ]  for i in range(epoch) ]
     print(date_ranges)
-    exp = "s2"
-    for data_i in range(len(date_ranges)):
-        # for model_class in [ RegLSTM]:
-        # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-        for model_class in [RegDNN]:
-            save_name = str(model_class.__name__.split(".")[-1])
-            with Context() as ctx:
-                saved_models = from_cache(f"{save_name}/models.pkl")
-                seq_col = "instrument"
-                if "Transformer" in save_name:
-                    seq_col = "instrument" 
-                if "LSTM" in save_name:
-                    seq_col = "datetime"
-                
-                samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
-                # for k in samplers.keys():
-                #     samplers[k].use_label_weight = save_name == "cls"
-                    # print(f"use_label_weight {samplers[k].use_label_weight}")
-                schedule = [32]
-                # schedule = [128, 256, 512]
-                # schedule = [512]
-                if saved_models:
-                    models = saved_models[-1]["models"]
-                    epoch_idx = saved_models[-1]["epoch_idx"]
-                else:
-                    models = {}
+    
+    for i in range(3):
+        exp = f"s2_{i}"
+        for data_i in range(len(date_ranges)):
+            # for model_class in [ RegLSTM]:
+            # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
+            for model_class in [RegDNN]:
+                save_name = str(model_class.__name__.split(".")[-1])+"_"+exp
+                with Context() as ctx:
+                    # saved_models = from_cache(f"{save_name}/models.pkl")
+                    saved_models = None
+                    seq_col = "instrument"
+                    if "Transformer" in save_name:
+                        seq_col = "instrument" 
+                    if "LSTM" in save_name:
+                        seq_col = "datetime"
+                    
+                    samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
+                    # for k in samplers.keys():
+                    #     samplers[k].use_label_weight = save_name == "cls"
+                        # print(f"use_label_weight {samplers[k].use_label_weight}")
+                    schedule = [32]
+                    # schedule = [128, 256, 512]
+                    # schedule = [512]
+                    if saved_models:
+                        models = saved_models[-1]["models"]
+                        epoch_idx = saved_models[-1]["epoch_idx"]
+                    else:
+                        models = {}
 
-                    for i in schedule:
-                        model_name = f"{exp}_{i}_{save_name}"
-                        models[model_name] = model_class(
-                            samplers[stages[0]].feature_columns(),
-                            scheduler_step=i,
-                        )
+                        for i in schedule:
+                            model_name = f"{exp}_{i}_{save_name}"
+                            models[model_name] = model_class(
+                                samplers[stages[0]].feature_columns(),
+                                scheduler_step=i,
+                            )
 
-                    epoch_idx = -1
+                        epoch_idx = -1
 
-                batch_size = 64
-                # if not seq_col:
-                #     batch_size *= 384
-                # trainer = Trainer(8092 * 4, samplers, models)
-                trainer = Trainer(batch_size, samplers, models)
-                # print(epoch_idx, i + 1)
-                trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
+                    batch_size = 64
+                    # if not seq_col:
+                    #     batch_size *= 384
+                    # trainer = Trainer(8092 * 4, samplers, models)
+                    trainer = Trainer(batch_size, samplers, models)
+                    # print(epoch_idx, i + 1)
+                    trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)

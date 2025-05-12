@@ -17,9 +17,7 @@ from trade.model.zoo import Net
 def mse(pred, target, weight = 1.0):
     # if not weight:
     # print("shapes", pred.shape, target.shape)
-   
     sqr_loss = torch.mul(pred - target, pred - target)
-    
     loss = torch.mul(sqr_loss, weight).mean()
     return loss
 

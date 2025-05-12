@@ -120,33 +120,38 @@ class QlibDataloader(BaseDataloader):
 
     def get_stock_params(self):
         d = get_inst(self.path)
-        if True:
-            inst  = get_inst(self.path, "csi300")
-            keys = inst.keys()
-            end = max([
-                v[-1] for v in inst.values()
-            ])
-            keys = [
-                k for k,v in inst.items() if v[-1] == end
-            ][:100]
+        keys = pd.read_csv("corr.csv")["instrument"].to_list()
+        d = { k:v for k,v in d.items() if k in keys}
+        # if True:
+        #     inst  = get_inst(self.path, "csi300")
+        #     keys = inst.keys()
+        #     end = max([
+        #         v[-1] for v in inst.values()
+        #     ])
+        #     keys = [
+        #         k for k,v in inst.items() if v[-1] == end
+        #     ][:100]
             
-            # print(inst["SH600811"], end, "SH600811" in keys)
-            # 1/0
+        #     # print(inst["SH600811"], end, "SH600811" in keys)
+        #     # 1/0
             
-            keys = list_dir()
-            keys = set(keys).intersection(set(d.keys()))
-            keys = sorted(list(keys), key=lambda x:x[2:])[:100]
+        #     keys = list_dir()
+        #     keys = set(keys).intersection(set(d.keys()))
+        #     keys = sorted(list(keys), key=lambda x:x[2:])[:100]
             
             
-            d = { k:v for k,v in d.items() if k in keys}
-            rs = list(d.items())
-            index = np.arange(len(rs))
-            # index =  np.random.choice(index, min(100, len(rs)), replace=False)
-            rs =  [rs[i] for i in index]
-            print("selected stocks", rs)
-            return rs
+        #     d = { k:v for k,v in d.items() if k in keys}
+        #     rs = list(d.items())
+        #     index = np.arange(len(rs))
+        #     # index =  np.random.choice(index, min(100, len(rs)), replace=False)
+        #     rs =  [rs[i] for i in index]
+        #     print("selected stocks", rs)
+        #     return rs
         #     # return [:50]
-        return list(d.items())
+        rs =  list(d.items())
+        import random
+        random.shuffle(rs)
+        return rs[:100]
 
     def get_all_days(self):
         days_path = os.path.join(self.path, "calendars", "day.txt")
