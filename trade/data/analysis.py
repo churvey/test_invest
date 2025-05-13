@@ -117,7 +117,7 @@ def select_inst():
             if df is not None:
                 # print(i, len(df))
                 df["mae"] = (
-                    (df["y"] - df["y_p"]) / (df["y"] + 1e-8)
+                    (df["y"] - df["y_p"])
                 ).abs()
                 # if valid_stocks is None:
                 max_date = df[~df["y"].isna()]["datetime"].max()
@@ -180,18 +180,35 @@ def select_inst():
             l.extend(
                 v["instrument"].tolist()
             )
-        print(l)
+        # print(l)
         print(len(l),"vs", len(set(l)))
         # count = {}
         rs = list(insts_rs.values())
         for v in rs[1:]:
             rs[0] = pd.merge(rs[0], v, on = "instrument", how="outer")
         mean = rs[0].mean()
+        
+        qs = {}
+        for i in [1, 10, 90, 99, 50]:
+            qs[i] = rs[0].quantile(q=(i/100.0), interpolation='linear')
+            print(i)
+            print(qs[i])
+        
         print(mean)
         # print(rs[0].dropna())
         
+        
         r = rs[0]
-        r = r[(r["corr_mean"] > mean["corr_mean"])]
+        
+        r.to_csv("select_inst.csv")
+        # r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
+        
+        # r = r[(r["corr_mean"] > qs[90]["corr_mean"])]
+        # r = r[(r["profit_mean"] > qs[90]["profit_mean"])]
+        
+        # r = r[(r["profit_min"] > qs[90]["profit_min"])]
+        
+        # r = r[(r["profit_var"] < qs[90]["profit_var"])]
         
         print(r.sort_values(["profit_mean"], ascending=False))
         
