@@ -120,8 +120,8 @@ class QlibDataloader(BaseDataloader):
 
     def get_stock_params(self):
         d = get_inst(self.path)
-        # keys = pd.read_csv("profit.csv")["instrument"].to_list()
-        # d = { k:v for k,v in d.items() if k in keys}
+        keys = pd.read_csv("inst.csv")["instrument"].to_list()
+        d = { k:v for k,v in d.items() if k in keys}
         # if True:
         #     inst  = get_inst(self.path, "csi300")
         #     keys = inst.keys()

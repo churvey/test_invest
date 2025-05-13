@@ -212,9 +212,16 @@ if __name__ == "__main__":
 
     def label_gen(data):
         l = data["close"].shape[0]
+        # pred = np.concatenate(
+        #         [
+        #             (data["open"][2:] / data["open"][1:-1] - 1) * 100,
+        #             [float("nan")] * 2,
+        #         ]
+        # )[:l]
+        
         pred = np.concatenate(
                 [
-                    (data["open"][2:] / data["open"][1:-1] - 1) * 100,
+                    (data["open"][2:] / data["close"][1:-1] - 1) * 100,
                     [float("nan")] * 2,
                 ]
         )[:l]
@@ -258,10 +265,10 @@ if __name__ == "__main__":
     epoch = 20
     if not use_roller:
         date_ranges = [
-            ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-03-13"),
+            ("2008-01-01", "2025-05-01"),
+            ("2025-05-01", "2025-05-11"),
             # ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-03-13"),
+            ("2025-05-11", "2025-05-13"),
         ]
         date_ranges = [date_ranges]
     else:
@@ -290,7 +297,7 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     
-    for i in range(50):
+    for i in range(5):
         exp = f"e_{i}"
         for data_i in range(len(date_ranges)):
             # for model_class in [ RegLSTM]:

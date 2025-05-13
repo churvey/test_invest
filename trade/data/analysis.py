@@ -211,16 +211,39 @@ def select_inst():
         # r = r[(r["profit_var"] < qs[90]["profit_var"])]
         
         print(r.sort_values(["profit_mean"], ascending=False))
-        
-        
 
+def analysis_inst():
+    inst = pd.read_csv("select_inst.csv")
+    c = [col for col in inst.columns if "Unnamed" not in col and "count" not in col] + ["mae_count"]
+    inst = inst[c].set_index("instrument")
+    print(inst)
+    qs = {}
+    for i in [1, 10, 90, 99, 50]:
+        qs[i] = inst.quantile(q=(i/100.0), interpolation='linear')
+        print(i)
+        print(qs[i])
+    r = inst    
+    r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
+    r = r[(r["corr_mean"] > qs[90]["corr_mean"])]
+    r = r[(r["profit_mean"] > qs[90]["profit_mean"])]
+    # r = r[(r["profit_var"] < qs[90]["profit_var"])]
+    
+    r = r[(r["profit_min"] > qs[50]["profit_min"])]
+    r = r[(r["corr_min"] > qs[50]["corr_min"])]
+    
+    r = r.sort_values(["profit_min"], ascending=False)
+    
+    print(r)
+    r.to_csv("inst.csv")
 
-def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
+def plot_pred():
 # def plot_pred(save_names = ["RegDNN"]):
     with Context() as ctx:
         
+        save_names = [f"RegDNN_e_{i}" for i in range(50)]
         preds = [from_cache(f"RegDNN_e_{i}/predict.pkl") for i in range(50)]
         preds = [p for p in preds if p is not None]
+        save_names = save_names[:len(preds)]
         # preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
         
         
@@ -283,7 +306,7 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
             # )
             
             q_rs = []
-            qs = [0.75, 0.85, 0.95, 0.99, 0.995, 0.999]
+            qs = [0.75, 0.85, 0.95, 0.99]
             for q in qs:
                 q_v = np.quantile(preds, q)
                 select = preds >= q_v
@@ -315,27 +338,28 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
         #     plt.grid(True, alpha=0.3)
         #     plt.show()
             
-        #     labels, preds = q_rs[-1]
-        # # 计算指标
-        #     from scipy.stats import pearsonr, spearmanr
-        #     from sklearn.metrics import r2_score
-        #     r_pearson, p_pearson = pearsonr(labels, preds)
-        #     r_spearman, p_spearman = spearmanr(labels, preds)
-        #     r2 = r2_score(labels, preds)
+            labels, preds = q_rs[-1]
+        # 计算指标
+            from scipy.stats import pearsonr, spearmanr
+            from sklearn.metrics import r2_score
+            r_pearson, p_pearson = pearsonr(labels, preds)
+            r_spearman, p_spearman = spearmanr(labels, preds)
+            r2 = r2_score(labels, preds)
 
-        #     # 绘制散点图 + 回归线
-        #     # plt.figure(figsize=(10, 6))
-        #     # plt.subplot(len(preds) + 1, 1, idx+1) 
-        #     sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'}, ax=axs[idx, 0])
-        #     # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
-        #     # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
-        #     axs[idx, 0].plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
-        #     # axs[idx, 0].xlabel('True Labels')
-        #     # axs[idx, 0].ylabel('Predictions')
-        #     axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
+            # 绘制散点图 + 回归线
+            # plt.figure(figsize=(10, 6))
+            # plt.subplot(len(preds) + 1, 1, idx+1) 
+            sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'}, ax=axs[idx, 0])
+            # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
+            # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
+            axs[idx, 0].plot([-10, 10], [-0.25, 0.25], '--', color='grey')  # 理想对角线
+            axs[idx, 0].plot([0,0], [-0.25, 0.25], '--', color='black')  # 理想对角线
+            # axs[idx, 0].xlabel('True Labels')
+            # axs[idx, 0].ylabel('Predictions')
+            axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
             
-        # plt.grid(True)
-        # plt.show()
+        plt.grid(True)
+        plt.show()
     
     
 
@@ -364,7 +388,33 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
         # plt.grid(True)
         # plt.show()
 
+def analysis_pred():
+    with Context() as ctx:
+        save_names = [f"RegDNN_e_{i}" for i in range(50)]
+        preds = [from_cache(f"RegDNN_e_{i}/predict.pkl") for i in range(50)]
+        preds = [p for p in preds if p is not None]
+        preds = [p[["instrument", "y_p"]] for p in preds]
+        pred = pd.concat(preds).groupby("instrument").agg({"y_p":["min", "max", "mean", "var", "count"]}).reset_index()
+        pred.columns = ['_'.join(col).strip() if col[1] != '' else col[0] for col in pred.columns]
+        pred = pred.set_index("instrument")
+        qs = pred.quantile(q=(50/100.0), interpolation='linear')
+        print(qs)
+        pred = pred.sort_values("y_p_mean",ascending=False)
+        print(pred.head(50))
+        pred1 = pred[pred["y_p_min"] >= qs["y_p_mean"]]
+        pred1 = pred1.sort_values("y_p_mean",ascending=False)
+        print(pred1)
+        pred1.to_csv("pred1.csv")
+        
+        pred2 = pred[pred["y_p_max"] <= qs["y_p_mean"]]
+        pred2 = pred2.sort_values("y_p_mean",ascending=True)
+        print(pred2)
+        pred2.to_csv("pred2.csv")
+        
+
 if __name__ == "__main__":
     # plot_label(label_gen)
     # plot_pred()
-    select_inst()
+    # select_inst()
+    # analysis_inst()
+    analysis_pred()

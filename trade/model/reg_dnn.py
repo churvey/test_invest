@@ -64,7 +64,7 @@ class RegDNN(Model, nn.Module):
             # "scorr":SpearmanCorrCoef().to(self.device),
             "mae": MeanAbsoluteError().to(self.device),
             "mse": MeanSquaredError().to(self.device),
-            "r2": R2Score().to(self.device),
+            # "r2": R2Score().to(self.device),
         }
         self.scheduler_step = scheduler_step
 
