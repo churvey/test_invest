@@ -109,8 +109,6 @@ def select_inst():
 
         # valid_stocks = None
 
-        test_ins = ["BJ872374"]
-
         insts_map = {"mae":[], "corr":[], "profit":[]}
         for i in range(50):
             df = from_cache(f"RegDNN_e_{i}/predict.pkl")
@@ -218,15 +216,15 @@ def analysis_inst():
     inst = inst[c].set_index("instrument")
     print(inst)
     qs = {}
-    for i in [1, 10, 90, 99, 50]:
+    for i in [1, 10, 80, 90, 99, 50]:
         qs[i] = inst.quantile(q=(i/100.0), interpolation='linear')
         print(i)
         print(qs[i])
     r = inst    
-    r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
-    r = r[(r["corr_mean"] > qs[90]["corr_mean"])]
-    r = r[(r["profit_mean"] > qs[90]["profit_mean"])]
-    # r = r[(r["profit_var"] < qs[90]["profit_var"])]
+    # r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
+    r = r[(r["corr_mean"] > qs[80]["corr_mean"])]
+    r = r[(r["profit_mean"] > qs[80]["profit_mean"])]
+    # r = r[(r["profit_var"] < qs[80]["profit_var"])]
     
     r = r[(r["profit_min"] > qs[50]["profit_min"])]
     r = r[(r["corr_min"] > qs[50]["corr_min"])]
