@@ -150,6 +150,8 @@ class Transformer(nn.Module):
     ):
         super(Transformer, self).__init__()
         self.feature_layer = nn.Linear(d_feat, d_model)
+        self.d_model = d_model
+        self.net = Net(d_feat, d_model, layers=(512,))
         # self.pos_encoder = PositionalEncoding(d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -161,19 +163,22 @@ class Transformer(nn.Module):
             self.encoder_layer, num_layers=num_layers
         )
         
-        Net(d_feat, d_model, layers=(512, 256))
-        
-        self.decoder_layer = nn.Linear(2 * d_model, 1)
+        self.decoder_layer = nn.Linear( 2 * d_model, 1)
         self.device = device
         self.d_feat = d_feat
 
-    def forward(self, src, mask=None):
+    def forward(self, x, mask=None):
         # print(src.shape, "shapes")
-        src = src.reshape(
-            len(src), -1, self.d_feat
+        batch_size = len(x)
+        src = x.reshape(
+            len(x), -1, self.d_feat
         )  # [batch_size, instruct_count, feature_dim]
         # print(src.shape, "shapes2")
         src = self.feature_layer(src)
+        
+        # src = src.reshape(
+        #     batch_size, -1, self.d_model
+        # )  # [batch_size, instruct_count, feature_dim]
 
         # src [N, T, F] --> [T, N, F], [60, 512, 8]
         src = src.transpose(1, 0)  # not batch first
@@ -182,9 +187,14 @@ class Transformer(nn.Module):
         output = self.transformer_encoder(
             src, src_key_padding_mask=mask
         )  # [60, 512, 8]
+        
+        output2 = self.net(x)
+        output2 = output2.reshape([batch_size, -1, self.d_model])
+        
+        output = torch.concatenate([output.transpose(1, 0), output2], dim=-1)
 
         # [T, N, F] --> [N, T*F]
-        output = self.decoder_layer(output.transpose(1, 0))  # [512, 1]
+        output = self.decoder_layer(output)  # [512, 1]
 
         return output.squeeze(dim=-1)
         # return output[..., 0]

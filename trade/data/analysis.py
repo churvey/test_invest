@@ -1,4 +1,3 @@
-
 import torch
 from torch import nn
 import pandas as pd
@@ -103,18 +102,18 @@ def plot_label(label_gen):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.show()
-    
+
 
 def select_inst():
     with Context() as ctx:
-        
+
         # valid_stocks = None
-        
+
         test_ins = ["BJ872374"]
-        
+
         insts_map = {"mae":[], "corr":[], "profit":[]}
         for i in range(50):
-            df = from_cache(f"RegDNN_s2_{i}/predict.pkl")
+            df = from_cache(f"RegDNN_e_{i}/predict.pkl")
             if df is not None:
                 # print(i, len(df))
                 df["mae"] = (
@@ -126,16 +125,20 @@ def select_inst():
                 # print("max_date", max_date)
                 valid_stocks = df[(df["datetime"] == max_date) & (~df["y"].isna())]["instrument"].to_list()
                 corr = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument")[["y", "y_p"]].corr().loc[(slice(None), "y_p"), "y"].reset_index()[["instrument", "y"]]
-                
+
                 yp90 = df[df['instrument'].isin(valid_stocks)].dropna()["y_p"].to_numpy()
                 yp90 = np.quantile(yp90, 0.9)
                 print("yp90", yp90)
+                # profit = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument").apply(
+                #     lambda x: x[x['y_p'] >= yp90]["y"].sum()
+                # ).to_frame(name="profit").reset_index().sort_values(["profit"], ascending=False)
+
                 profit = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument").apply(
-                    lambda x: x[x['y_p'] >= yp90]["y"].sum()
+                    lambda x: len(x[(x['y_p'] >= yp90) & (x['y'] > 0)]) * 1.0 / (len(x[(x['y_p'] >= yp90)]) + 1e-8)
                 ).to_frame(name="profit").reset_index().sort_values(["profit"], ascending=False)
-                
+
                 # print(profit)
-                
+
                 # print()
                 # df = df[df["instrument"].isin(valid_stocks)]
                 corr = corr.sort_values(["y"], ascending=False)
@@ -143,29 +146,72 @@ def select_inst():
                 # print(corr)
                 mae = df.groupby('instrument')["mae"].mean().to_frame(name="mae").reset_index().sort_values(["mae"])
                 mae = mae[mae['instrument'].isin(valid_stocks)]
-                
+
                 # print(mae)
                 insts_map["mae"].append(mae)
                 insts_map["corr"].append(corr)
                 insts_map["profit"].append(profit)
-        
+
+        insts_rs  = {}
         for k, insts in insts_map.items():
-            for i in insts:
-                print(i[i["instrument"].isin(test_ins)])
-            
+            # for i in insts:
+            #     print(i[i["instrument"].isin(test_ins)])
+#   col1_sum=('col1', 'sum'),
+#     col1_mean=('col1', 'mean'),
+#     col2_max=('col2', 'max')
             # insts = [p.head(10) for p in insts]
-            insts = pd.concat(insts).sort_values(k)
+            insts = pd.concat(insts).sort_values(k, ascending=(k == "mae"))
             # print(insts[insts["instrument"].isin(test_ins)])
-            insts = insts.groupby('instrument')[k].min().to_frame(name=k).reset_index().sort_values([k], ascending=(k == "mae")).reset_index(drop=True).head(100)
-            print(insts)
+            insts = insts.groupby("instrument").agg({k: 
+                
+                
+                ["min", "max", "mean", "var", "count"]}).reset_index()
+            
+            # print(insts.columns)
+            insts.columns = ['_'.join(col).strip() if col[1] != '' else col[0] for col in insts.columns]
+            
+
+            insts = insts.sort_values([f"{k}_mean"], ascending=(k == "mae")).reset_index(drop=True)
+            # print(insts)
             insts.to_csv(f"{k}.csv")
+            insts_rs[k] = insts
+        l = []
+        for v in insts_rs.values():
+            l.extend(
+                v["instrument"].tolist()
+            )
+        print(l)
+        print(len(l),"vs", len(set(l)))
+        # count = {}
+        rs = list(insts_rs.values())
+        for v in rs[1:]:
+            rs[0] = pd.merge(rs[0], v, on = "instrument", how="outer")
+        mean = rs[0].mean()
+        print(mean)
+        # print(rs[0].dropna())
         
-    
-    
+        r = rs[0]
+        r = r[(r["corr_mean"] > mean["corr_mean"])]
+        
+        print(r.sort_values(["profit_mean"], ascending=False))
+        
+        
+
+
 def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
 # def plot_pred(save_names = ["RegDNN"]):
     with Context() as ctx:
-        preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
+        
+        preds = [from_cache(f"RegDNN_e_{i}/predict.pkl") for i in range(50)]
+        preds = [p for p in preds if p is not None]
+        # preds = [ from_cache(f"{save_name}/predict.pkl") for save_name in save_names]
+        
+        
+        profit  = pd.read_csv("profit.csv")["instrument"].tolist()
+        
+        preds = [
+            p[p["instrument"].isin(profit)] for p in preds
+        ]
         
         if len(save_names) > 10:
             pred = preds[0].copy()
@@ -199,9 +245,9 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
             preds_t = top_n["y_p"].to_numpy()
             
             d_sig = np.sum(labels_t * preds_t >0)
-            print(
-                "d_sig top_n", d_sig / len(labels_t)
-            )
+            # print(
+            #     "d_sig top_n", d_sig / len(labels_t)
+            # )
             
             # print(top_n)
             
@@ -211,13 +257,13 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
 
             # mae = np.abs(labels-preds)
             diff = labels-preds
-            print(
-                "mean", np.mean(diff), len(pred)
-            )
+            # print(
+            #     "mean", np.mean(diff), len(pred)
+            # )
             d_sig = np.sum(labels * preds >0)
-            print(
-                "d_sig", d_sig / len(labels)
-            )
+            # print(
+            #     "d_sig", d_sig / len(labels)
+            # )
             
             q_rs = []
             qs = [0.75, 0.85, 0.95, 0.99, 0.995, 0.999]
@@ -227,8 +273,8 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
                 d_sig = np.sum(labels[select] * preds[select] > 0)
                 # d_sig_n = np.sum(labels[select] * preds[select] < 0)
                 
-                if q == qs[-1]:
-                    print(pred[select])
+                # if q == qs[-1]:
+                #     print(pred[select])
                 
                 d_sig_2 = np.sum(labels[select] >= 1.0 )
                 sum_label = np.sum(labels[select]) / len(labels[select])
@@ -238,7 +284,7 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
                 q_rs.append(
                     [labels[select] , preds[select]]
                 )
-            
+            print("#"*10)
             
         
             
@@ -252,24 +298,24 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
         #     plt.grid(True, alpha=0.3)
         #     plt.show()
             
-            labels, preds = q_rs[-1]
-        # 计算指标
-            from scipy.stats import pearsonr, spearmanr
-            from sklearn.metrics import r2_score
-            r_pearson, p_pearson = pearsonr(labels, preds)
-            r_spearman, p_spearman = spearmanr(labels, preds)
-            r2 = r2_score(labels, preds)
+        #     labels, preds = q_rs[-1]
+        # # 计算指标
+        #     from scipy.stats import pearsonr, spearmanr
+        #     from sklearn.metrics import r2_score
+        #     r_pearson, p_pearson = pearsonr(labels, preds)
+        #     r_spearman, p_spearman = spearmanr(labels, preds)
+        #     r2 = r2_score(labels, preds)
 
-            # 绘制散点图 + 回归线
-            # plt.figure(figsize=(10, 6))
-            # plt.subplot(len(preds) + 1, 1, idx+1) 
-            sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'}, ax=axs[idx, 0])
-            # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
-            # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
-            axs[idx, 0].plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
-            # axs[idx, 0].xlabel('True Labels')
-            # axs[idx, 0].ylabel('Predictions')
-            axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
+        #     # 绘制散点图 + 回归线
+        #     # plt.figure(figsize=(10, 6))
+        #     # plt.subplot(len(preds) + 1, 1, idx+1) 
+        #     sns.regplot(x=labels, y=preds, scatter_kws={'alpha':0.5}, line_kws={'color':'red'}, ax=axs[idx, 0])
+        #     # sns.regplot(x=q_rs[-1][0], y=q_rs[-1][1], scatter_kws={'alpha':0.5})
+        #     # plt.plot([-0.1, 0.1], [-0.1, 0.1], '--', color='grey')  # 理想对角线
+        #     axs[idx, 0].plot([-10, 10], [-10, 10], '--', color='grey')  # 理想对角线
+        #     # axs[idx, 0].xlabel('True Labels')
+        #     # axs[idx, 0].ylabel('Predictions')
+        #     axs[idx, 0].set_title(f'{save_names[idx]} Pearson r={r_pearson:.3f}, Spearman ρ={r_spearman:.3f}\nR²={r2:.3f}')
             
         # plt.grid(True)
         # plt.show()
@@ -300,7 +346,7 @@ def plot_pred(save_names = ["RegDNN", "RegTransformer"]):
         # plt.title('Q-Q Plot: Labels vs. Predictions')
         # plt.grid(True)
         # plt.show()
-    
+
 if __name__ == "__main__":
     # plot_label(label_gen)
     # plot_pred()

@@ -46,7 +46,8 @@ class Net(nn.Module):
                         m.weight, a=0.1, mode="fan_in", nonlinearity="leaky_relu"
                     )
 
-        def forward(self, x):
+        def forward(self, x, reshape=True):
+            # if reshape:
             x = x.reshape([-1, self.input_dim])
             cur_output = x
             for i, now_layer in enumerate(self.dnn_layers):

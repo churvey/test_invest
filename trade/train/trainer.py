@@ -290,16 +290,16 @@ if __name__ == "__main__":
         ]  for i in range(epoch) ]
     print(date_ranges)
     
-    for i in range(3):
-        exp = f"s2_{i}"
+    for i in range(50):
+        exp = f"e_{i}"
         for data_i in range(len(date_ranges)):
             # for model_class in [ RegLSTM]:
             # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
             for model_class in [RegDNN]:
                 save_name = str(model_class.__name__.split(".")[-1])+"_"+exp
                 with Context() as ctx:
-                    # saved_models = from_cache(f"{save_name}/models.pkl")
-                    saved_models = None
+                    saved_models = from_cache(f"{save_name}/models.pkl")
+                    # saved_models = None
                     seq_col = "instrument"
                     if "Transformer" in save_name:
                         seq_col = "instrument" 
@@ -320,7 +320,7 @@ if __name__ == "__main__":
                         models = {}
 
                         for i in schedule:
-                            model_name = f"{exp}_{i}_{save_name}"
+                            model_name = f"s_{i}_{save_name}"
                             models[model_name] = model_class(
                                 samplers[stages[0]].feature_columns(),
                                 scheduler_step=i,
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
                         epoch_idx = -1
 
-                    batch_size = 64
+                    batch_size = 32
                     # if not seq_col:
                     #     batch_size *= 384
                     # trainer = Trainer(8092 * 4, samplers, models)
