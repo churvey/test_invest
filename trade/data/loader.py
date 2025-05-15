@@ -108,10 +108,11 @@ class BaseDataloader:
 
 class QlibDataloader(BaseDataloader):
 
-    def __init__(self, path, label_generators=[], csi = None, extend_feature = True):
+    def __init__(self, path, label_generators=[], csi = None, extend_feature = True, insts=[]):
         super(QlibDataloader, self).__init__(path, label_generators, extend_feature)
         self.csi = csi
         self.csi_ins = {}
+        self.insts = insts
         if self.csi:
             self.csi_ins = get_inst(self.path, self.csi)
         self.days = self.get_all_days()
@@ -120,8 +121,13 @@ class QlibDataloader(BaseDataloader):
 
     def get_stock_params(self):
         d = get_inst(self.path)
-        keys = pd.read_csv("inst.csv")["instrument"].to_list()
-        d = { k:v for k,v in d.items() if k in keys}
+        keep = []
+        if self.insts:
+            keep = list({ k:v for k,v in d.items() if k in self.insts}.items())
+            d = {k:v for k,v in d.items() if k not in self.insts}
+            
+        # keys = pd.read_csv("inst.csv")["instrument"].to_list()
+        # d = { k:v for k,v in d.items() if k in keys()}
         # if True:
         #     inst  = get_inst(self.path, "csi300")
         #     keys = inst.keys()
@@ -151,7 +157,7 @@ class QlibDataloader(BaseDataloader):
         rs =  list(d.items())
         import random
         random.shuffle(rs)
-        return rs[:1000]
+        return keep + rs[:100 - len(keep)]
 
     def get_all_days(self):
         days_path = os.path.join(self.path, "calendars", "day.txt")

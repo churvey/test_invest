@@ -104,114 +104,62 @@ def plot_label(label_gen):
     plt.show()
 
 
-def select_inst():
+def select_inst(saved = None):
+    if saved is None:
+        saved = [f"r_0_RegDNN_exp_{i}" for i in range(50)]
     with Context() as ctx:
-
-        # valid_stocks = None
-
         insts_map = {"mae":[], "corr":[], "profit":[]}
-        for i in range(50):
-            df = from_cache(f"RegDNN_e_{i}/predict.pkl")
+        for s in saved:
+            df = from_cache(f"{s}/predict.pkl")
             if df is not None:
-                # print(i, len(df))
                 df["mae"] = (
                     (df["y"] - df["y_p"])
                 ).abs()
-                # if valid_stocks is None:
                 max_date = df[~df["y"].isna()]["datetime"].max()
-                # print(df[df["instrument"] == "SZ300495"])
-                # print("max_date", max_date)
                 valid_stocks = df[(df["datetime"] == max_date) & (~df["y"].isna())]["instrument"].to_list()
                 corr = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument")[["y", "y_p"]].corr().loc[(slice(None), "y_p"), "y"].reset_index()[["instrument", "y"]]
 
                 yp90 = df[df['instrument'].isin(valid_stocks)].dropna()["y_p"].to_numpy()
                 yp90 = np.quantile(yp90, 0.9)
                 print("yp90", yp90)
-                # profit = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument").apply(
-                #     lambda x: x[x['y_p'] >= yp90]["y"].sum()
-                # ).to_frame(name="profit").reset_index().sort_values(["profit"], ascending=False)
-
                 profit = df[df['instrument'].isin(valid_stocks)].dropna().groupby("instrument").apply(
                     lambda x: len(x[(x['y_p'] >= yp90) & (x['y'] > 0)]) * 1.0 / (len(x[(x['y_p'] >= yp90)]) + 1e-8)
                 ).to_frame(name="profit").reset_index().sort_values(["profit"], ascending=False)
 
-                # print(profit)
-
-                # print()
-                # df = df[df["instrument"].isin(valid_stocks)]
                 corr = corr.sort_values(["y"], ascending=False)
                 corr.columns = ["instrument", "corr"]
-                # print(corr)
                 mae = df.groupby('instrument')["mae"].mean().to_frame(name="mae").reset_index().sort_values(["mae"])
                 mae = mae[mae['instrument'].isin(valid_stocks)]
-
-                # print(mae)
                 insts_map["mae"].append(mae)
                 insts_map["corr"].append(corr)
                 insts_map["profit"].append(profit)
 
         insts_rs  = {}
         for k, insts in insts_map.items():
-            # for i in insts:
-            #     print(i[i["instrument"].isin(test_ins)])
-#   col1_sum=('col1', 'sum'),
-#     col1_mean=('col1', 'mean'),
-#     col2_max=('col2', 'max')
-            # insts = [p.head(10) for p in insts]
             insts = pd.concat(insts).sort_values(k, ascending=(k == "mae"))
-            # print(insts[insts["instrument"].isin(test_ins)])
-            insts = insts.groupby("instrument").agg({k: 
-                
-                
-                ["min", "max", "mean", "var", "count"]}).reset_index()
-            
-            # print(insts.columns)
+            insts = insts.groupby("instrument").agg({k:["min", "max", "mean", "var", "count"]}).reset_index()
             insts.columns = ['_'.join(col).strip() if col[1] != '' else col[0] for col in insts.columns]
-            
-
             insts = insts.sort_values([f"{k}_mean"], ascending=(k == "mae")).reset_index(drop=True)
-            # print(insts)
-            insts.to_csv(f"{k}.csv")
             insts_rs[k] = insts
         l = []
         for v in insts_rs.values():
             l.extend(
                 v["instrument"].tolist()
             )
-        # print(l)
         print(len(l),"vs", len(set(l)))
-        # count = {}
         rs = list(insts_rs.values())
         for v in rs[1:]:
             rs[0] = pd.merge(rs[0], v, on = "instrument", how="outer")
-        mean = rs[0].mean()
         
         qs = {}
         for i in [1, 10, 90, 99, 50]:
-            qs[i] = rs[0].quantile(q=(i/100.0), interpolation='linear')
-            print(i)
-            print(qs[i])
-        
-        print(mean)
-        # print(rs[0].dropna())
-        
-        
+            qs[i] = rs[0].set_index("instrument").quantile(q=(i/100.0), interpolation='linear')
         r = rs[0]
-        
-        r.to_csv("select_inst.csv")
-        # r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
-        
-        # r = r[(r["corr_mean"] > qs[90]["corr_mean"])]
-        # r = r[(r["profit_mean"] > qs[90]["profit_mean"])]
-        
-        # r = r[(r["profit_min"] > qs[90]["profit_min"])]
-        
-        # r = r[(r["profit_var"] < qs[90]["profit_var"])]
-        
-        print(r.sort_values(["profit_mean"], ascending=False))
+        return r
 
-def analysis_inst():
-    inst = pd.read_csv("select_inst.csv")
+def analysis_inst(inst=None, max=100):
+    if inst is None:
+        inst = pd.read_csv("select_inst.csv")
     c = [col for col in inst.columns if "Unnamed" not in col and "count" not in col] + ["mae_count"]
     inst = inst[c].set_index("instrument")
     print(inst)
@@ -221,18 +169,14 @@ def analysis_inst():
         print(i)
         print(qs[i])
     r = inst    
-    # r = r[(r["mae_mean"] < qs[90]["mae_mean"])]
     r = r[(r["corr_mean"] > qs[80]["corr_mean"])]
     r = r[(r["profit_mean"] > qs[80]["profit_mean"])]
-    # r = r[(r["profit_var"] < qs[80]["profit_var"])]
-    
     r = r[(r["profit_min"] > qs[50]["profit_min"])]
     r = r[(r["corr_min"] > qs[50]["corr_min"])]
-    
-    r = r.sort_values(["profit_min"], ascending=False)
+    r = r.sort_values(["profit_min"], ascending=False).head(max)
     
     print(r)
-    r.to_csv("inst.csv")
+    return r
 
 def plot_pred():
 # def plot_pred(save_names = ["RegDNN"]):

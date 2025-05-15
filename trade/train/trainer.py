@@ -13,8 +13,10 @@ from trade.data.sampler import *
 from trade.model.reg_dnn import RegDNN, RegTransformer ,RegLSTM, AVG
 from trade.model.cls_dnn import ClsDNN
 from trade.train.utils import *
+from trade.data.analysis import select_inst, analysis_inst, analysis_pred
 import numpy as np
 import torch
+
 
 
 def get_writer(date=None):
@@ -176,9 +178,9 @@ class Trainer:
             self.run_phase("predict", save_name=save_name)
 
 
-def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument", loader = None):
+def get_samplers_cpp(label_gen, date_ranges, csi=None, seq_col = "instrument", loader = None, insts=None):
     if not loader:
-        loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi)
+        loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts)
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
         # loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
@@ -206,10 +208,149 @@ def get_label(data):
     return rs
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
+
+    # def label_gen(data):
+    #     l = data["close"].shape[0]
+    #     # pred = np.concatenate(
+    #     #         [
+    #     #             (data["open"][2:] / data["open"][1:-1] - 1) * 100,
+    #     #             [float("nan")] * 2,
+    #     #         ]
+    #     # )[:l]
+        
+    #     pred = np.concatenate(
+    #             [
+    #                 (data["open"][2:] / data["close"][1:-1] - 1) * 100,
+    #                 [float("nan")] * 2,
+    #             ]
+    #     )[:l]
+        
+    #     inc = np.concatenate(
+    #             [
+    #                 (data["open"][1:] / data["close"][:-1] - 1) * 100,
+    #                 [float("nan")] * 1,
+    #             ]
+    #     )[:l]
+    #     # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
+    #     # valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
+    #     valid = (inc <= 0.098 * 100) # 去掉涨停板
+    #     pred[~valid] = float("nan")
+        
+    #     # print(f'valid {valid.sum()} vs {len(valid)}' )
+    #     # 1/0
+        
+    #     # for k in data.keys():
+    #     #     data[k] = data[k][valid]            
+        
+    #     return {
+    #         # "pred": np.concatenate(
+    #         #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
+    #         # )[:l],
+    #         "pred": pred,
+    #         "inc": inc,
+    #         # "pred": np.concatenate(
+    #         #     [np.log(data["open"] / data["close"]), []]
+    #         # )[:l],
+    #         # "pred": np.concatenate(
+    #         #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
+    #         # )[:l],
+    #         # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
+    #         #  "cls": get_label(data),
+    #     }
+
+    # stages = ["train", "valid", "predict"]
+
+    # use_roller = False
+    # epoch = 20
+    # if not use_roller:
+    #     date_ranges = [
+    #         ("2008-01-01", "2025-05-01"),
+    #         ("2025-05-01", "2025-05-13"),
+    #         # ("2008-01-01", "2023-12-31"),
+    #         ("2025-05-13", "2025-05-14"),
+    #     ]
+    #     # date_ranges = [
+    #     #     ("2008-01-01", "2024-01-01"),
+    #     #     ("2024-01-01", "2024-12-31"),
+    #     #     # ("2008-01-01", "2023-12-31"),
+    #     #     ("2024-01-01", "2024-12-31"),
+    #     # ]
+    #     date_ranges = [date_ranges]
+    # else:
+    #     date_ranges = [
+    #         ("2012-01-01", "2023-12-31"),
+    #         ("2024-01-01", "2024-01-31"),
+    #         ("2024-01-01", "2024-01-31"),
+    #     ]
+    #     def get(date_range, i):
+            
+    #         from datetime import datetime
+    #         from dateutil.relativedelta import relativedelta  # 需要安装
+
+    #         def add_month_safe(date_str, input_format="%Y-%m-%d"):
+    #             # 解析字符串为日期对象
+    #             date = datetime.strptime(date_str, input_format)
+                
+    #             # 直接加一个月（自动处理月末）
+    #             new_date = date + relativedelta(months=i)
+    #             return new_date.strftime(input_format)
+    #         b, e = date_range
+    #         return add_month_safe(b), add_month_safe(e) 
+
+    #     date_ranges = [[
+    #         get(date_ranges[j], i) for j in range(len(date_ranges))
+    #     ]  for i in range(epoch) ]
+    # print(date_ranges)
+    
+    # for i in range(5):
+    #     exp = f"e_{i}"
+    #     for data_i in range(len(date_ranges)):
+    #         # for model_class in [ RegLSTM]:
+    #         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
+    #         for model_class in [RegDNN]:
+    #             save_name = str(model_class.__name__.split(".")[-1])+"_"+exp
+    #             with Context() as ctx:
+    #                 saved_models = from_cache(f"{save_name}/models.pkl")
+    #                 # saved_models = None
+    #                 seq_col = "instrument"
+    #                 if "Transformer" in save_name:
+    #                     seq_col = "instrument" 
+    #                 if "LSTM" in save_name:
+    #                     seq_col = "datetime"
+                    
+    #                 samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
+    #                 # for k in samplers.keys():
+    #                 #     samplers[k].use_label_weight = save_name == "cls"
+    #                     # print(f"use_label_weight {samplers[k].use_label_weight}")
+    #                 schedule = [32]
+    #                 # schedule = [128, 256, 512]
+    #                 # schedule = [512]
+    #                 if saved_models:
+    #                     models = saved_models[-1]["models"]
+    #                     epoch_idx = saved_models[-1]["epoch_idx"]
+    #                 else:
+    #                     models = {}
+
+    #                     for i in schedule:
+    #                         model_name = f"s_{i}_{save_name}"
+    #                         models[model_name] = model_class(
+    #                             samplers[stages[0]].feature_columns(),
+    #                             scheduler_step=i,
+    #                         )
+
+    #                     epoch_idx = -1
+
+    #                 batch_size = 32
+    #                 # if not seq_col:
+    #                 #     batch_size *= 384
+    #                 # trainer = Trainer(8092 * 4, samplers, models)
+    #                 trainer = Trainer(batch_size, samplers, models)
+    #                 # print(epoch_idx, i + 1)
+    #                 trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
 
 
-
+def train(insts , exp_i):
     def label_gen(data):
         l = data["close"].shape[0]
         # pred = np.concatenate(
@@ -263,88 +404,80 @@ if __name__ == "__main__":
 
     use_roller = False
     epoch = 20
-    if not use_roller:
-        date_ranges = [
-            ("2008-01-01", "2025-05-01"),
-            ("2025-05-01", "2025-05-13"),
-            # ("2008-01-01", "2023-12-31"),
-            ("2025-05-13", "2025-05-14"),
-        ]
-        # date_ranges = [
-        #     ("2008-01-01", "2024-01-01"),
-        #     ("2024-01-01", "2024-12-31"),
-        #     # ("2008-01-01", "2023-12-31"),
-        #     ("2024-01-01", "2024-12-31"),
-        # ]
-        date_ranges = [date_ranges]
-    else:
-        date_ranges = [
-            ("2012-01-01", "2023-12-31"),
-            ("2024-01-01", "2024-01-31"),
-            ("2024-01-01", "2024-01-31"),
-        ]
-        def get(date_range, i):
-            
-            from datetime import datetime
-            from dateutil.relativedelta import relativedelta  # 需要安装
-
-            def add_month_safe(date_str, input_format="%Y-%m-%d"):
-                # 解析字符串为日期对象
-                date = datetime.strptime(date_str, input_format)
+    date_ranges = [
+        ("2008-01-01", "2025-05-01"),
+        ("2025-05-01", "2025-05-13"),
+        # ("2008-01-01", "2023-12-31"),
+        ("2025-05-13", "2025-05-14"),
+    ]
+    date_ranges = [
+        ("2008-01-01", "2024-01-01"),
+        ("2024-01-01", "2024-12-31"),
+        # ("2008-01-01", "2023-12-31"),
+        ("2024-01-01", "2024-12-31"),
+    ]
+    date_ranges = [date_ranges]
+    exp = f"exp_{exp_i}"
+    save_names = []
+    for data_i in range(len(date_ranges)):
+        # for model_class in [ RegLSTM]:
+        # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
+        for model_class in [RegDNN]:
+            save_name = f"r_{data_i}_"+str(model_class.__name__.split(".")[-1])+"_"+exp
+            save_names.append(save_name)
+            with Context() as ctx:
+                saved_models = from_cache(f"{save_name}/models.pkl")
+                # saved_models = None
+                seq_col = "instrument"
+                if "Transformer" in save_name:
+                    seq_col = "instrument" 
+                if "LSTM" in save_name:
+                    seq_col = "datetime"
                 
-                # 直接加一个月（自动处理月末）
-                new_date = date + relativedelta(months=i)
-                return new_date.strftime(input_format)
-            b, e = date_range
-            return add_month_safe(b), add_month_safe(e) 
+                samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col, insts=insts)
+                # for k in samplers.keys():
+                #     samplers[k].use_label_weight = save_name == "cls"
+                    # print(f"use_label_weight {samplers[k].use_label_weight}")
+                schedule = [32]
+                # schedule = [128, 256, 512]
+                # schedule = [512]
+                if saved_models:
+                    models = saved_models[-1]["models"]
+                    epoch_idx = saved_models[-1]["epoch_idx"]
+                else:
+                    models = {}
 
-        date_ranges = [[
-            get(date_ranges[j], i) for j in range(len(date_ranges))
-        ]  for i in range(epoch) ]
-    print(date_ranges)
-    
-    for i in range(5):
-        exp = f"e_{i}"
-        for data_i in range(len(date_ranges)):
-            # for model_class in [ RegLSTM]:
-            # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-            for model_class in [RegDNN]:
-                save_name = str(model_class.__name__.split(".")[-1])+"_"+exp
-                with Context() as ctx:
-                    saved_models = from_cache(f"{save_name}/models.pkl")
-                    # saved_models = None
-                    seq_col = "instrument"
-                    if "Transformer" in save_name:
-                        seq_col = "instrument" 
-                    if "LSTM" in save_name:
-                        seq_col = "datetime"
-                    
-                    samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
-                    # for k in samplers.keys():
-                    #     samplers[k].use_label_weight = save_name == "cls"
-                        # print(f"use_label_weight {samplers[k].use_label_weight}")
-                    schedule = [32]
-                    # schedule = [128, 256, 512]
-                    # schedule = [512]
-                    if saved_models:
-                        models = saved_models[-1]["models"]
-                        epoch_idx = saved_models[-1]["epoch_idx"]
-                    else:
-                        models = {}
+                    for i in schedule:
+                        model_name = f"s_{i}_{save_name}"
+                        models[model_name] = model_class(
+                            samplers[stages[0]].feature_columns(),
+                            scheduler_step=i,
+                        )
 
-                        for i in schedule:
-                            model_name = f"s_{i}_{save_name}"
-                            models[model_name] = model_class(
-                                samplers[stages[0]].feature_columns(),
-                                scheduler_step=i,
-                            )
+                    epoch_idx = -1
 
-                        epoch_idx = -1
+                batch_size = 32
+                # if not seq_col:
+                #     batch_size *= 384
+                # trainer = Trainer(8092 * 4, samplers, models)
+                trainer = Trainer(batch_size, samplers, models)
+                # print(epoch_idx, i + 1)
+                trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
+    return save_names
 
-                    batch_size = 32
-                    # if not seq_col:
-                    #     batch_size *= 384
-                    # trainer = Trainer(8092 * 4, samplers, models)
-                    trainer = Trainer(batch_size, samplers, models)
-                    # print(epoch_idx, i + 1)
-                    trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
+def exp():
+    selected = []
+    saved = []
+    for i in range(50):
+        saved.extend(train(selected, i))
+        if i % 5 == 0:
+            s_rs = select_inst(saved)
+            rs = analysis_inst(s_rs, max=10)
+            selected.extend(rs)
+            selected = list(set(selected))
+            saved = []
+    return selected
+
+
+if __name__ == "__main__":
+    exp()
