@@ -16,6 +16,7 @@ from trade.train.utils import *
 from trade.data.analysis import select_inst, analysis_inst, analysis_pred
 import numpy as np
 import torch
+import argparse
 
 
 def get_writer(date=None):
@@ -196,12 +197,12 @@ class Trainer:
 def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
-    # if not loader:
-    #     loader = QlibDataloader(
-    #         os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
-    #     )
+    if not loader:
+        loader = QlibDataloader(
+            os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+        )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    loader = FtDataloader("./qmt", [label_gen])
+    # loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
@@ -543,4 +544,14 @@ def exp():
 
 if __name__ == "__main__":
     # exp()
-    train([], 5)
+    # for i in range(5):
+    
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description='trainer')
+
+    parser.add_argument('--exp', nargs="+", type=int)
+    
+    args = parser.parse_args()
+    for exp_id in args.exp:
+        train([], exp_id)
