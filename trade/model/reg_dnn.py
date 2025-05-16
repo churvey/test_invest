@@ -38,7 +38,11 @@ class RegDNN(Model, nn.Module):
     def __init__(self, features, output_dim=1, device="cuda", scheduler_step=20):
         nn.Module.__init__(self)
         Model.__init__(self, features)
-        self.model = Net(len(self.features), output_dim, layers=(512, 256))
+        
+        self.embedding_dim = 64
+        self.embedding = nn.Embedding(num_embeddings=10000, embedding_dim=self.embedding_dim)
+        
+        self.model = Net(len(self.features) + self.embedding_dim, output_dim, layers=(512, 256))
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
         )
@@ -64,12 +68,21 @@ class RegDNN(Model, nn.Module):
             # "scorr":SpearmanCorrCoef().to(self.device),
             "mae": MeanAbsoluteError().to(self.device),
             "mse": MeanSquaredError().to(self.device),
-            # "r2": R2Score().to(self.device),
+            "r2": R2Score().to(self.device),
         }
         self.scheduler_step = scheduler_step
 
     def forward(self, *args, **kwargs):
-        return self.model.forward(*args)
+        x = args[0]
+        x_cat = kwargs["x_cat"]
+        # print("forward", x.shape, x_cat.shape, x_cat)
+        em = self.embedding(x_cat)
+        x = x.reshape([len(x), em.shape[1], -1])
+        
+        v = torch.concatenate(
+            [x, em],dim=-1
+        ).reshape([len(x), -1])
+        return self.model.forward(v)
 
     def step(self, data, step_idx, is_train=False):
         x = data["x"]

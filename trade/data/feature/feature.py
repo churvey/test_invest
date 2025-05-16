@@ -72,9 +72,9 @@ class Feature:
 
     #     rs[up_flag] = 1
 
-    #     low_flag = (data["change"] <= -limit) & (data["close"] - data["low"] < 1e-5)
+    #     # low_flag = (data["change"] <= -limit) & (data["close"] - data["low"] < 1e-5)
 
-    #     rs[low_flag] = 2
+    #     # rs[low_flag] = 2
 
     #     return rs
 

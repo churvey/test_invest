@@ -31,7 +31,8 @@ class Sampler:
         features = loader.features
         self.seq_col = seq_col
         self.max_seqlen = max_seqlen
-        # features.
+        
+        self.total_ins = np.sort(loader.features["instrument"].drop_duplicates().to_numpy())
         
         if day_range:
             begin, end = day_range
@@ -55,9 +56,10 @@ class Sampler:
         t = dict(zip(features.columns, na_count.to_numpy()))
         logging.info(f"na_count { {k: v for k, v in t.items() if v > 0.05} }")
         if not seq_col:
-            features = features.dropna()
+            # features = features.dropna()
             shape = [len(features), -1]
             self.seq_len = 1
+            print(features)
         else:
             assert seq_col in loader.indices
             index_col = [p for p in loader.indices if p != seq_col][0]
@@ -269,6 +271,10 @@ class SamplersCpp(Sampler):
                     "instrument": self.instrument_np[indices].reshape([len(data["x"]), -1]),
                     **data,
                 }
+                code = np.array([np.searchsorted(self.total_ins, i) + 1 for i in sample_data["instrument"].reshape([-1])], dtype='int32')
+                code = code.reshape(sample_data["instrument"].shape)
+                sample_data["x_cat"] = torch.asarray(code).pin_memory()
+                # print(sample_data["x_cat"])
                 # print("sample data", {k:v.shape for k,v in sample_data.items()})
                 yield sample_data
         total_len = (len(index) + batch_size - 1) // batch_size

@@ -83,6 +83,8 @@ class BaseDataloader:
                     if not self.base_columns:
                         self.base_columns = base_columns
                     single = pd.DataFrame.from_dict(rs_np)
+                    # single = single.dropna(subset=[c for c in single.columns if c !="y_pred"])
+                    single = single.dropna()
                 except BaseException as e:
                     assert rs_np is not None, str(e)
                     shape = {k: v.shape for k, v in rs_np.items()}
@@ -126,8 +128,8 @@ class QlibDataloader(BaseDataloader):
             keep = list({ k:v for k,v in d.items() if k in self.insts}.items())
             d = {k:v for k,v in d.items() if k not in self.insts}
             
-        # keys = pd.read_csv("inst.csv")["instrument"].to_list()
-        # d = { k:v for k,v in d.items() if k in keys()}
+        # keys = pd.read_csv("sci.csv")["instrument"].to_list()
+        # d = { k:v for k,v in d.items() if k in keys}
         # if True:
         #     inst  = get_inst(self.path, "csi300")
         #     keys = inst.keys()
@@ -155,9 +157,10 @@ class QlibDataloader(BaseDataloader):
         #     return rs
         #     # return [:50]
         rs =  list(d.items())
-        import random
-        random.shuffle(rs)
-        return keep + rs[:100 - len(keep)]
+        # import random
+        # random.shuffle(rs)
+        # return keep + rs[:100 - len(keep)]
+        return rs
 
     def get_all_days(self):
         days_path = os.path.join(self.path, "calendars", "day.txt")
@@ -226,20 +229,26 @@ class FtDataloader(BaseDataloader):
     def get_stock_params(self):
         # inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
         # print(inst)
+        # files = os.listdir(self.path)
         
-        inst  = get_inst(os.path.expanduser("~/output/qlib_bin"))
-        keys = inst.keys()
-        keys = [
-            k[2:] for k,v in inst.items()
-        ]
+        # inst  = get_inst(os.path.expanduser("~/output/qlib_bin"))
+        # keys = inst.keys()
+        # keys = [
+        #     k[2:] for k,v in inst.items()
+        # ]
+        
+        # file_keys = [p[:6] for p in files if p.endswith(".csv")]
+        # keys = set(keys).intersection(set(file_keys))
+        # keys = sorted(list(keys))[:100]
+        
+        
+        # params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in keys]
+        # print(f"{len(files)} vs {len(params)}")
+        
+        # return params
+        
         files = os.listdir(self.path)
-        file_keys = [p[:6] for p in files if p.endswith(".csv")]
-        keys = set(keys).intersection(set(file_keys))
-        keys = sorted(list(keys))[:100]
-        
-        
-        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in keys]
-        print(f"{len(files)} vs {len(params)}")
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
         return params
 
     def get_stock_features(self, path):
@@ -252,7 +261,7 @@ class FtDataloader(BaseDataloader):
         df.columns = columns_rename
         
         # volume == 0
-        no_valid = df["volume"] == 0
+        no_valid = (df["volume"] == 0)
         for k in "open,close,high,low,volume,change".split(","):
             # df[k][no_valid] = float("nan")
             df.loc[no_valid, k] = float('nan')

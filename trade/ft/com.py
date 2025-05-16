@@ -55,5 +55,6 @@ def update_latest_price(df):
 if __name__ == "__main__":
     df = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [], extend_feature=False).features
     df = df[df["datetime"] == "2025-05-13"]
+    df.to_csv("qlib_bin.csv")
     # print(df)
-    update_latest_price(df)
+    # update_latest_price(df)

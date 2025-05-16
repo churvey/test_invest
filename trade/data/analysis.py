@@ -353,10 +353,19 @@ def analysis_pred():
         print(pred2)
         pred2.to_csv("pred2.csv")
         
-
+def analysis_cls():
+    with Context() as ctx:
+        save_names = ["r_0_ClsDNN_exp_5"]
+        preds = [from_cache(f"{s}/predict.pkl") for s in save_names]
+        print(preds[0])
+        p = preds[0]
+        p = p[(p["y_p"] == 1) | (p["y"]==1)]
+        print(p)
+        
 if __name__ == "__main__":
     # plot_label(label_gen)
     # plot_pred()
     # select_inst()
     # analysis_inst()
-    analysis_pred()
+    # analysis_pred()
+    analysis_cls()

@@ -48,11 +48,15 @@ class FocalBCEWithLogitsLoss(nn.Module):
 class ClsDNN(Model, nn.Module):
 
     def __init__(
-        self, features, output_dim=3, device="cuda", weight=None, scheduler_step=20
+        self, features, output_dim=2, device="cuda", weight=torch.asarray([0.2, 0.8]), scheduler_step=20
     ):
         nn.Module.__init__(self)
         Model.__init__(self, features)
-        self.model = Net(len(features), output_dim)
+        self.embedding_dim = 64
+        self.embedding = nn.Embedding(num_embeddings=10000, embedding_dim=self.embedding_dim)
+        
+        self.model = Net(len(self.features) + self.embedding_dim, output_dim, layers=(512, 256))
+        # self.model = Net(len(features), output_dim)
         self.output_dim = output_dim
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.002, weight_decay=0.0002
@@ -94,10 +98,11 @@ class ClsDNN(Model, nn.Module):
 
     def step(self, data, step_idx, is_train=False):
         x = data["x"]
-        y_cls = data["y_cls"].reshape([-1]).to(torch.int64)
+        y_cls = data["y_pred"].reshape([-1]).to(torch.int64)
         y = torch.nn.functional.one_hot(y_cls, self.output_dim).to(torch.float32)
-        self.optimizer.zero_grad()
-        y_p = self.forward(x)
+        if is_train:
+            self.optimizer.zero_grad()
+        y_p = self.forward(x,**data)
         loss = self.loss_fn(y_p, y)
         if is_train:
             loss.backward()
@@ -121,13 +126,14 @@ class ClsDNN(Model, nn.Module):
 
         # if not is_train:
         #     # y_p, y, loss, metric = self.step(data, step_idx)
-        y_cls = data["y_cls"].reshape([-1]).to(torch.int64)
+        y_cls = data["y_pred"].reshape([-1]).to(torch.int64)
         yp_cls = torch.argmax(y_p, dim=1)
 
         for i in range(self.output_dim):
             m[f"y_{i}"] = torch.sum(y_cls == i) * 1.0 / y_cls.shape[0]
             m[f"yp_{i}"] = torch.sum(yp_cls == i) * 1.0 / yp_cls.shape[0]
-        return y_p, y, loss, m
+        # return y_p, y, loss, m
+        return yp_cls, y_cls, loss, m
 
         # return *rs, m
 
@@ -145,7 +151,17 @@ class ClsDNN(Model, nn.Module):
         return self.step(data, step_idx)
 
     def forward(self, *args, **kwargs):
-        return self.model.forward(*args, **kwargs)
+        x = args[0]
+        x_cat = kwargs["x_cat"]
+        # print("forward", x.shape, x_cat.shape, x_cat)
+        em = self.embedding(x_cat)
+        x = x.reshape([len(x), em.shape[1], -1])
+        
+        v = torch.concatenate(
+            [x, em],dim=-1
+        ).reshape([len(x), -1])
+        return self.model.forward(v)
+        # return self.model.forward(*args, **kwargs)
   
     def to_device(self, v):
         return torch.asarray(v, self.device)
