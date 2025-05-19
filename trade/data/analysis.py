@@ -355,15 +355,16 @@ def analysis_pred():
         
 def analysis_cls():
     with Context() as ctx:
+        
         save_names = [f"r_0_ClsDNN_exp_{i}" for i in range(10)]
         preds = [from_cache(f"{s}/predict.pkl") for s in save_names]
         preds = [p for p in preds if p is not None]
-        # print(preds[0])
+        print(preds[0])
         # p = preds[0]
         preds = pd.concat(preds).groupby(["instrument", "datetime"]).agg({"y_p":["sum"], "y":["mean"]}).reset_index()
         preds.columns = [col[0] if col[1] != '' else col[0] for col in preds.columns]
         p = preds.sort_values(["datetime", "instrument"])
-        print(p.tail(20))
+        # print(p.tail(20))
         p = p[(p["y_p"] >= 1) | (p["y"]==1)]
         print(p)
         

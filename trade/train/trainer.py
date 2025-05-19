@@ -86,18 +86,20 @@ class Trainer:
 
                         # pdb.set_trace()
                         value_dict = {
-                                    "instrument": data["instrument"].reshape([-1]),
-                                    "datetime": data["datetime"].reshape([-1]),
-                                    # "y_inc": data["y_inc"].cpu().numpy().reshape([-1]),
-                                    "y": y.detach().cpu().numpy().reshape([-1]),
-                                    "y_p": y_p.detach().cpu().numpy().reshape([-1]),
-                                }
-                        print({k:v.shape for k,v in value_dict.items()})
-                        save_pd.append(
-                            pd.DataFrame.from_dict(
-                                value_dict
-                            )
-                        )
+                            "instrument": data["instrument"].reshape([-1]),
+                            "datetime": data["datetime"].reshape([-1]),
+                            # "y_inc": data["y_inc"].cpu().numpy().reshape([-1]),
+                            "y": y.detach().cpu().numpy().reshape([-1]),
+                            "y_p": y_p.detach().cpu().numpy().reshape([-1]),
+                            
+                        }
+                        
+                        for k,v in data.items():
+                            if k.startswith("y_") and k not in value_dict:
+                                value_dict[k] = data[k].reshape([-1]).cpu().numpy()
+                        
+                        print({k: v.shape for k, v in value_dict.items()})
+                        save_pd.append(pd.DataFrame.from_dict(value_dict))
 
             for name in self.models:
                 self.run_streams[name].synchronize()
@@ -197,12 +199,12 @@ class Trainer:
 def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
-    if not loader:
-        loader = QlibDataloader(
-            os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
-        )
+    # if not loader:
+    #     loader = QlibDataloader(
+    #         os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+    #     )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    # loader = FtDataloader("./qmt", [label_gen])
+    loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 
@@ -382,6 +384,10 @@ def train(insts, exp_i):
 
         up_flag = (data["change"] >= limit) & (data["high"] - data["close"] < 1e-5)
 
+        cannot_buy = (data["change"] >= limit) & (data["high"] - data["low"] < 1e-5)
+
+        cannot_sell = (data["change"] <= -limit) & (data["high"] - data["low"] < 1e-5)
+
         rs[up_flag] = 1
 
         pred = np.zeros(rs.shape)
@@ -394,7 +400,7 @@ def train(insts, exp_i):
 
         pred[first_up & (nrs == 1)] = 1
         pred[first_up & (nrs == 0)] = 0
-        if pred[-1] !=0 and pred[-1] !=1 and first_up[-1]:
+        if pred[-1] != 0 and pred[-1] != 1 and first_up[-1]:
             pred[-1] = 0
 
         # pred = np.concatenate(
@@ -433,6 +439,8 @@ def train(insts, exp_i):
             #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
             # )[:l],
             "pred": pred,
+            "cs": ~cannot_sell,
+            "cb": ~cannot_buy,
             # "inc": inc,
             # "pred": np.concatenate(
             #     [np.log(data["open"] / data["close"]), []]
@@ -449,10 +457,10 @@ def train(insts, exp_i):
     use_roller = False
     epoch = 500
     date_ranges = [
-        ("2008-01-01", "2025-05-01"),
-        ("2025-05-01", "2025-05-14"),
+        ("2008-01-01", "2025-01-01"),
+        ("2025-01-01", "2025-05-17"),
         # ("2008-01-01", "2023-12-31"),
-        ("2025-05-14", "2025-05-16"),
+        ("2025-01-01", "2025-05-17"),
     ]
     # date_ranges = [
     #     ("2008-01-01", "2024-01-01"),
@@ -545,13 +553,13 @@ def exp():
 if __name__ == "__main__":
     # exp()
     # for i in range(5):
-    
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='trainer')
 
-    parser.add_argument('--exp', nargs="+", type=int)
-    
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="trainer"
+    )
+
+    parser.add_argument("--exp", nargs="+", type=int)
+
     args = parser.parse_args()
     for exp_id in args.exp:
         train([], exp_id)

@@ -257,6 +257,10 @@ class FtDataloader(BaseDataloader):
         # columns = "code,name,time_key,open,close,high,low,pe_ratio,turnover_rate,volume,turnover,change_rate,last_close"
         columns = "code,time_key,open,close,high,low,volume,change_rate".split(",")
         columns_rename = "instrument,datetime,open,close,high,low,volume,change".split(",")
+        others =[p for p in df.columns if p not in columns and "Unnamed" not in p]
+        columns += others
+        columns_rename += others
+        
         df = df[columns]
         df.columns = columns_rename
         
