@@ -199,13 +199,13 @@ class Trainer:
 def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
-    # if not loader:
+    if not loader:
     #     loader = QlibDataloader(
     #         os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
     #     )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    loader = FtDataloader("./qmt", [label_gen])
-    return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
+        loader = FtDataloader("./qmt", [label_gen])
+    return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 
 def get_label(data):
@@ -372,7 +372,7 @@ def get_label(data):
 #                 trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
 
 
-def train(insts, exp_i):
+def train(insts, exp_i, loader = []):
     def label_gen(data):
         limit = 0.099
         if data["instrument"][0][2:5] in ["300", "688"]:
@@ -384,14 +384,22 @@ def train(insts, exp_i):
 
         up_flag = (data["change"] >= limit) & (data["high"] - data["close"] < 1e-5)
 
-        cannot_buy = (data["change"] >= limit) & (data["high"] - data["low"] < 1e-5)
+        # cannot_buy = (data["change"] >= limit) & (data["high"] - data["low"] < 1e-5)
 
-        cannot_sell = (data["change"] <= -limit) & (data["high"] - data["low"] < 1e-5)
+        # cannot_sell = (data["change"] <= -limit) & (data["high"] - data["low"] < 1e-5)
 
         rs[up_flag] = 1
 
         pred = np.zeros(rs.shape)
         pred[:] = float("nan")
+        
+        from numpy.lib.stride_tricks import sliding_window_view
+
+        # window_shape = 30
+        # lrs = np.concatenate([[0] *  window_shape, rs[:-1]])
+        # lrs = np.sum(sliding_window_view(lrs, window_shape=window_shape), axis = -1)
+
+        # assert len(lrs) == len(rs)
 
         lrs = np.concatenate([[float("nan")], rs[:-1]])
         nrs = np.concatenate([rs[1:], [float("nan")]])
@@ -439,8 +447,8 @@ def train(insts, exp_i):
             #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
             # )[:l],
             "pred": pred,
-            "cs": ~cannot_sell,
-            "cb": ~cannot_buy,
+            # "cs": ~cannot_sell,
+            # "cb": ~cannot_buy,
             # "inc": inc,
             # "pred": np.concatenate(
             #     [np.log(data["open"] / data["close"]), []]
@@ -458,9 +466,9 @@ def train(insts, exp_i):
     epoch = 500
     date_ranges = [
         ("2008-01-01", "2025-01-01"),
-        ("2025-01-01", "2025-05-17"),
+        ("2025-05-01", "2025-05-19"),
         # ("2008-01-01", "2023-12-31"),
-        ("2025-01-01", "2025-05-17"),
+        ("2025-05-19", "2025-05-21"),
     ]
     # date_ranges = [
     #     ("2008-01-01", "2024-01-01"),
@@ -489,12 +497,15 @@ def train(insts, exp_i):
                 if "LSTM" in save_name:
                     seq_col = "datetime"
 
-                samplers = get_samplers_cpp(
+                samplers, l = get_samplers_cpp(
                     label_gen,
                     dict(zip(stages, date_ranges[data_i])),
                     seq_col=seq_col,
                     insts=insts,
+                    loader=loader[0] if loader else None
                 )
+                if not loader:
+                    loader.append(l)
                 # for k in samplers.keys():
                 #     samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
@@ -560,6 +571,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--exp", nargs="+", type=int)
 
+
     args = parser.parse_args()
-    for exp_id in args.exp:
-        train([], exp_id)
+    exps = list(range(10)) 
+    if args.exp[0] > 0:
+        exps = args.exp
+    loaders = []
+    for exp_id in exps:
+        train([], exp_id, loaders)

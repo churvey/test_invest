@@ -248,12 +248,13 @@ class FtDataloader(BaseDataloader):
         # return params
         
         files = os.listdir(self.path)
-        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
+        # params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".feather")]
         return params
 
     def get_stock_features(self, path):
         path = [path] if not isinstance(path, list) else path
-        df = pd.concat([pd.read_csv(p) for p in path])
+        df = pd.concat([pd.read_csv(p) if p.endswith(".csv") else pd.read_feather(p) for p in path])
         # columns = "code,name,time_key,open,close,high,low,pe_ratio,turnover_rate,volume,turnover,change_rate,last_close"
         columns = "code,time_key,open,close,high,low,volume,change_rate".split(",")
         columns_rename = "instrument,datetime,open,close,high,low,volume,change".split(",")
