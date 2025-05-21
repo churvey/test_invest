@@ -94,7 +94,8 @@ def trade():
     with Context() as ctx:
         save_names = [f"r_0_ClsDNN_exp_{i}" for i in range(10)]
         preds = [from_cache(f"{s}/predict.pkl") for s in save_names]
-        preds = [p for p in preds if p is not None]
+        preds = [p["instrument,datetime,y,y_p,y_pred".split(",")] for p in preds if p is not None] 
+        
         print(preds[0])
         agg_dict = {
             k:["mean"] for k in preds[0].columns if "y" in k
@@ -107,57 +108,81 @@ def trade():
         # p = p[(p["y_p"] >= 1) | (p["y"]==1)]
         # print(p)
         
-        f2 = FtDataloader("./qmt", [label_gen], extend_feature=False).features
+        # f2 = FtDataloader("./qmt", extend_feature=False).features
+        insts = preds["instrument"].drop_duplicates().to_list()
+        print(f"insts len:{len(insts)}")
         
+        f2 = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], extend_feature=False, insts=insts).features
         preds = preds.merge(f2.reset_index(drop=True), how="left", on = ["instrument", "datetime"])
         
     print(preds)
         
-    cash = 20000.0
+    cash = 200000.0
     holds = {}
-    dates = np.unique(np.sort(preds["datetime"].to_numpy()))
+    dates = np.sort(np.unique(preds["datetime"].to_numpy()))
     for i, date in enumerate(dates):
         if i < len(dates) - 1:
+            # print(f"begin to prcocess {date}")
             p = preds[preds["datetime"]==date]
             buy_date = dates[i+1]
             buy_p = f2[f2["datetime"]==buy_date]
-            candi = p[(p["y_p"] >=1) & (p["y_cb"] >=1)].sort_values("y_p", ascending=False).head(1)["instrument"].to_list()
+            candi_f = p[(p["y_p"] >=2)].sort_values("y_p", ascending=False)
+            print(candi_f)
+            candi = candi_f.head(10)["instrument"].to_list()
+            
             candi_sell = holds.copy()
-            buy_caches = cash // len(candi)
+            
             
             def get_price(c, p = "open"):
-                print(buy_p, c)
+                
                 p_c = buy_p[buy_p["instrument"] == c]
-                open = (p_c[p] / p_c["factor"]).iloc[0]
-                open = round(open, 2)
-                return open 
+                price = (p_c[p] / p_c["factor"]).iloc[0]
+                # print(f"{price} vs {round(price, 2)}")
+                price = round(price, 2)
+                return price 
             
-            for c in candi:
-                if c in holds:
-                    candi_sell.pop(c)
-                    continue
-                open = get_price(c)
-                
-                # buy(buy_caches, c, open)
-                
-                amount = buy_caches * 100 // (open * 100 * 100) * 100
-                cash -= open *amount
-                holds[c] = amount
-                
-                print(f"buy {c} {buy_date} " )
+            if len(candi) > 0:
+                buy_caches = cash // len(candi)
+                for c in candi:
+                    if c in holds:
+                        candi_sell.pop(c)
+                        continue
+                    # print(buy_p, c)
+                    pc = buy_p[buy_p["instrument"] == c]
+                    if len(pc) == 0 or pc["y_cb"].iloc[0] == False:
+                        print(f"cannot by {date} {c} ")
+                        continue
+                    
+                    open = get_price(c)
+                    
+                    # buy(buy_caches, c, open)
+                    
+                    amount = buy_caches * 100 // (open * 100 * 100) * 100
+                    if amount > 0:
+                        cash -= open * amount
+                        holds[c] = amount, open
+                        
+                        print(f"buy {buy_caches} {c} {date} {open} {open * amount}" )
+                        # assert open * amount > 0
             
             for c,v in candi_sell.items():
-                p_c = buy_p[[buy_p["instrument"] == c]]
-                if p_c["y_cs"] == 0:
+                pc = buy_p[buy_p["instrument"] == c]
+                if len(pc) == 0 or pc["y_cs"].iloc[0] == False:
                     continue
                 else:
                     open = get_price(c)
-                cash += open * v
-                holds.pop(c)
-                
-            total_value = cash
-            for c, v in holds.items():
-                total_value += v * get_price(c, "close")    
-            print(f"predict on {date} action on {buy_date} total_value when close {total_value}")
+                    value = open * v[0]
+                    cash += value
+                    holds.pop(c)
+                    print(f"sell {c} {date} {open}-{v[1]}={open - v[1]} {(open-v[1])/v[1]*100 :2f}%" )
+            
+            try:
+                total_value = cash
+                for c, v in holds.items():
+                    total_value += v[0] * get_price(c, "close")    
+                print(f"predict on {date} action on {buy_date} total_value when close {total_value}")
+            except BaseException as e:
+                print(e)
+                pass
     
 trade()
