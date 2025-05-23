@@ -121,7 +121,7 @@ class Feature:
             c = sliding_window_view(c, i)
             v = sliding_window_view(v, i)
             val = np.full(data["close"].shape, float("nan"))
-            is_valid = ~np.isnan(data["volume"]) & ~np.isnan(data["close"])
+            is_valid = data["volume"] > 0 & ~np.isnan(data["close"])
             val[is_valid] = corr(v[is_valid], c[is_valid])
 
             assert val.shape == data["close"].shape
@@ -131,7 +131,7 @@ class Feature:
     def cord(self, data):
         name = "cord"
         for i in self.rolling_window:
-            v = data["volume"][1:] / (data["volume"][:-1])
+            v = data["volume"][1:] / (data["volume"][:-1] + 1e-9)
             # c = data["change"]
             v = np.concatenate([[float("nan")] * i, v])
             c = np.concatenate([[float("nan")] * (i - 1), data["change"]])
@@ -230,11 +230,17 @@ class Feature:
             data[f"{name}_{i}"] = val
 
     def ma(self, data):
-        return self.__rolling__(data, "ma", np.nanmean)
+        return self.__rolling__(data, "ma", np.nanmean, func2=None)
 
     def std(self, data):
-        return self.__rolling__(data, "std", np.nanstd)
-
+        return self.__rolling__(data, "std", np.nanstd, func2=None)
+    
+    def std_divide(self, data):
+        return self.__rolling__(data, "std_divide", np.nanstd)
+    
+    def ma_divide(self, data):
+        return self.__rolling__(data, "ma_divide", np.nanmean)
+    
     def max(self, data):
         return self.__rolling__(data, "max", np.nanmax, "high")
 

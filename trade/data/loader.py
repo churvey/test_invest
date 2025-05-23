@@ -82,9 +82,12 @@ class BaseDataloader:
                     base_columns, rs_np = ray.get(ready)[0]
                     if not self.base_columns:
                         self.base_columns = base_columns
-                    single = pd.DataFrame.from_dict(rs_np)
+                    if isinstance(rs_np, dict):
+                        single = pd.DataFrame.from_dict(rs_np)
+                    else:
+                        single = rs_np
                     # single = single.dropna(subset=[c for c in single.columns if c !="y_pred"])
-                    single = single.dropna()
+                    # single = single.dropna()
                 except BaseException as e:
                     assert rs_np is not None, str(e)
                     shape = {k: v.shape for k, v in rs_np.items()}
@@ -249,7 +252,7 @@ class FtDataloader(BaseDataloader):
         
         files = os.listdir(self.path)
         # params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
-        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".feather")]
+        params = [(os.path.join(self.path, p),) for p in files if p.endswith(".feather") or p.endswith(".csv")]
         return params
 
     def get_stock_features(self, path):
@@ -266,10 +269,54 @@ class FtDataloader(BaseDataloader):
         df.columns = columns_rename
         
         # volume == 0
-        no_valid = (df["volume"] == 0)
-        for k in "open,close,high,low,volume,change".split(","):
-            # df[k][no_valid] = float("nan")
-            df.loc[no_valid, k] = float('nan')
-        data = {k: df[k].to_numpy() for k in df.columns}
-        data = self.add_columns(data)
-        return data
+        # no_valid = (df["volume"] == 0)
+        # print(df[["datetime", "close", "volume"]][no_valid])
+        # for k in "open,close,high,low,volume,change".split(","):
+        #     # df[k][no_valid] = float("nan")
+        #     df.loc[no_valid, k] = float('nan')
+        
+        datetime = pd.to_datetime(df["datetime"])
+        if datetime.diff().iloc[-1].total_seconds() == 3600:
+            resample_range = [1, 5 ,15, 30, 60, 120]
+            resample = "min"
+        else:
+            resample_range = [1, 5 , 20]
+            resample = "D"
+        
+        df_i = df["open,close,high,low,volume,change".split(",")]
+        df_i["datetime"] = datetime
+        df_i = df_i.set_index("datetime")
+        total = None
+        def change_func(series):
+            v = 1
+            for p in series:
+                v *= (1+p)
+            return v - 1
+        for min in resample_range:
+            if min > 1:
+                df_i = df_i.resample(f"{min}{resample}").agg({
+                    "open":"first",
+                    "close":"last",
+                    "high":"max",
+                    "low":"min",
+                    "volume":"sum",
+                    "change":change_func
+                }).dropna()
+
+            # print(df_i)
+            # df_i["change"] = df_i["close"].pct_change(fill_method=None)
+            data = {k: df_i[k].to_numpy() for k in df_i.columns}
+            base_columns, data = self.add_columns(data)
+            data["datetime"] = df_i.index.to_numpy()
+            data = pd.DataFrame.from_dict(data)
+            data.set_index("datetime")
+            assert "datetime" in data.columns
+            if total is None:
+                total = data
+            else:
+                columns = [c for c in data.columns if c not in base_columns]
+                data = data[columns]
+                data.columns = [f"{col}_{min}m" if col != "datetime" else col for col in data.columns ]
+                total = total.merge(data, how="left", on="datetime").ffill()
+        total["instrument"] = df["instrument"]
+        return base_columns, total
