@@ -423,6 +423,6 @@ class Feature:
             val = np.mean(sliding_window_view(increase, i), axis=1)  # n-i +1
             val2 = np.mean(sliding_window_view(decrease, i), axis=1)  # n-i +1
             val -= val2
-            assert val.shape == data["close"].shape
+            assert val.shape == data["close"].shape, (val.shape, data["close"].shape)
             data[f"{name}_{i}"] = val
         return None

@@ -465,10 +465,10 @@ def train(insts, exp_i, loader = []):
     use_roller = False
     epoch = 500
     date_ranges = [
-        ("2008-01-01", "2025-01-01"),
-        ("2025-05-01", "2025-05-19"),
+        ("2008-01-01", "2025-05-20"),
+        ("2025-05-21", "2055-01-01"),
         # ("2008-01-01", "2023-12-31"),
-        ("2025-05-19", "2025-05-21"),
+        ("2025-05-21", "2055-01-01"),
     ]
     # date_ranges = [
     #     ("2008-01-01", "2024-01-01"),
@@ -573,7 +573,7 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    exps = list(range(10)) 
+    exps = list(range(4)) 
     if args.exp[0] > 0:
         exps = args.exp
     loaders = []
