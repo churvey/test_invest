@@ -87,7 +87,7 @@ class BaseDataloader:
                     else:
                         single = rs_np
                     # single = single.dropna(subset=[c for c in single.columns if c !="y_pred"])
-                    # single = single.dropna()
+                    single = single.dropna()
                 except BaseException as e:
                     assert rs_np is not None, str(e)
                     shape = {k: v.shape for k, v in rs_np.items()}
@@ -284,8 +284,8 @@ class FtDataloader(BaseDataloader):
             resample = "D"
         
         df_i = df["open,close,high,low,volume,change".split(",")]
-        df_i["datetime"] = datetime
-        df_i = df_i.set_index("datetime")
+        # df_i["datetime_2"] = datetime
+        df_i = df_i.set_index(datetime)
         total = None
         def change_func(series):
             v = 1
@@ -303,20 +303,26 @@ class FtDataloader(BaseDataloader):
                     "change":change_func
                 }).dropna()
 
-            # print(df_i)
+            if len(df_i) == 0 :
+                break
+            
+            # print(df_i)  
             # df_i["change"] = df_i["close"].pct_change(fill_method=None)
             data = {k: df_i[k].to_numpy() for k in df_i.columns}
-            base_columns, data = self.add_columns(data)
             data["datetime"] = df_i.index.to_numpy()
+            data["instrument"] = np.full(data["datetime"].shape, df["instrument"].iloc[0])
+            base_columns, data = self.add_columns(data)
             data = pd.DataFrame.from_dict(data)
             data.set_index("datetime")
             assert "datetime" in data.columns
             if total is None:
                 total = data
             else:
-                columns = [c for c in data.columns if c not in base_columns]
+                columns = [c for c in data.columns if c not in base_columns or c == "datetime"]
+                # print("cols", base_columns)
                 data = data[columns]
                 data.columns = [f"{col}_{min}m" if col != "datetime" else col for col in data.columns ]
-                total = total.merge(data, how="left", on="datetime").ffill()
-        total["instrument"] = df["instrument"]
+                total = total.merge(data, how="left", on=["datetime"]).ffill()
+        # total["instrument"] = df["instrument"]
+        print(total.tail(10))
         return base_columns, total
