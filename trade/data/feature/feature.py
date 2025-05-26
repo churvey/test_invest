@@ -131,7 +131,7 @@ class Feature:
     def cord(self, data):
         name = "cord"
         for i in self.rolling_window:
-            v = data["volume"][1:] / (data["volume"][:-1] + 1e-9)
+            v = data["volume"][1:] / (data["volume"][:-1])
             # c = data["change"]
             v = np.concatenate([[float("nan")] * i, v])
             c = np.concatenate([[float("nan")] * (i - 1), data["change"]])
@@ -230,17 +230,11 @@ class Feature:
             data[f"{name}_{i}"] = val
 
     def ma(self, data):
-        return self.__rolling__(data, "ma", np.nanmean, func2=None)
+        return self.__rolling__(data, "ma", np.nanmean)
 
     def std(self, data):
-        return self.__rolling__(data, "std", np.nanstd, func2=None)
-    
-    def std_divide(self, data):
-        return self.__rolling__(data, "std_divide", np.nanstd)
-    
-    def ma_divide(self, data):
-        return self.__rolling__(data, "ma_divide", np.nanmean)
-    
+        return self.__rolling__(data, "std", np.nanstd)
+
     def max(self, data):
         return self.__rolling__(data, "max", np.nanmax, "high")
 
@@ -423,6 +417,6 @@ class Feature:
             val = np.mean(sliding_window_view(increase, i), axis=1)  # n-i +1
             val2 = np.mean(sliding_window_view(decrease, i), axis=1)  # n-i +1
             val -= val2
-            assert val.shape == data["close"].shape, (val.shape, data["close"].shape)
+            assert val.shape == data["close"].shape
             data[f"{name}_{i}"] = val
         return None
