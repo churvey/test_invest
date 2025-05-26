@@ -121,7 +121,7 @@ class Feature:
             c = sliding_window_view(c, i)
             v = sliding_window_view(v, i)
             val = np.full(data["close"].shape, float("nan"))
-            is_valid = data["volume"] > 0 & ~np.isnan(data["close"])
+            is_valid = ~np.isnan(data["volume"]) & ~np.isnan(data["close"])
             val[is_valid] = corr(v[is_valid], c[is_valid])
 
             assert val.shape == data["close"].shape
