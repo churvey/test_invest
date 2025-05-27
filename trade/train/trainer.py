@@ -200,11 +200,11 @@ def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
     if not loader:
-    #     loader = QlibDataloader(
-    #         os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
-    #     )
+        # loader = QlibDataloader(
+        #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+        # )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        loader = FtDataloader("./qmt", [label_gen])
+        loader = FtDataloader("./tmp2", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 
@@ -230,245 +230,21 @@ def get_label(data):
     return rs
 
 
-# if __name__ == "__main__":
-
-# def label_gen(data):
-#     l = data["close"].shape[0]
-#     # pred = np.concatenate(
-#     #         [
-#     #             (data["open"][2:] / data["open"][1:-1] - 1) * 100,
-#     #             [float("nan")] * 2,
-#     #         ]
-#     # )[:l]
-
-#     pred = np.concatenate(
-#             [
-#                 (data["open"][2:] / data["close"][1:-1] - 1) * 100,
-#                 [float("nan")] * 2,
-#             ]
-#     )[:l]
-
-#     inc = np.concatenate(
-#             [
-#                 (data["open"][1:] / data["close"][:-1] - 1) * 100,
-#                 [float("nan")] * 1,
-#             ]
-#     )[:l]
-#     # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
-#     # valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
-#     valid = (inc <= 0.098 * 100) # 去掉涨停板
-#     pred[~valid] = float("nan")
-
-#     # print(f'valid {valid.sum()} vs {len(valid)}' )
-#     # 1/0
-
-#     # for k in data.keys():
-#     #     data[k] = data[k][valid]
-
-#     return {
-#         # "pred": np.concatenate(
-#         #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
-#         # )[:l],
-#         "pred": pred,
-#         "inc": inc,
-#         # "pred": np.concatenate(
-#         #     [np.log(data["open"] / data["close"]), []]
-#         # )[:l],
-#         # "pred": np.concatenate(
-#         #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
-#         # )[:l],
-#         # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
-#         #  "cls": get_label(data),
-#     }
-
-# stages = ["train", "valid", "predict"]
-
-# use_roller = False
-# epoch = 20
-# if not use_roller:
-#     date_ranges = [
-#         ("2008-01-01", "2025-05-01"),
-#         ("2025-05-01", "2025-05-13"),
-#         # ("2008-01-01", "2023-12-31"),
-#         ("2025-05-13", "2025-05-14"),
-#     ]
-#     # date_ranges = [
-#     #     ("2008-01-01", "2024-01-01"),
-#     #     ("2024-01-01", "2024-12-31"),
-#     #     # ("2008-01-01", "2023-12-31"),
-#     #     ("2024-01-01", "2024-12-31"),
-#     # ]
-#     date_ranges = [date_ranges]
-# else:
-#     date_ranges = [
-#         ("2012-01-01", "2023-12-31"),
-#         ("2024-01-01", "2024-01-31"),
-#         ("2024-01-01", "2024-01-31"),
-#     ]
-#     def get(date_range, i):
-
-#         from datetime import datetime
-#         from dateutil.relativedelta import relativedelta  # 需要安装
-
-#         def add_month_safe(date_str, input_format="%Y-%m-%d"):
-#             # 解析字符串为日期对象
-#             date = datetime.strptime(date_str, input_format)
-
-#             # 直接加一个月（自动处理月末）
-#             new_date = date + relativedelta(months=i)
-#             return new_date.strftime(input_format)
-#         b, e = date_range
-#         return add_month_safe(b), add_month_safe(e)
-
-#     date_ranges = [[
-#         get(date_ranges[j], i) for j in range(len(date_ranges))
-#     ]  for i in range(epoch) ]
-# print(date_ranges)
-
-# for i in range(5):
-#     exp = f"e_{i}"
-#     for data_i in range(len(date_ranges)):
-#         # for model_class in [ RegLSTM]:
-#         # for model_class in [RegDNN, RegTransformer,RegLSTM ]:
-#         for model_class in [RegDNN]:
-#             save_name = str(model_class.__name__.split(".")[-1])+"_"+exp
-#             with Context() as ctx:
-#                 saved_models = from_cache(f"{save_name}/models.pkl")
-#                 # saved_models = None
-#                 seq_col = "instrument"
-#                 if "Transformer" in save_name:
-#                     seq_col = "instrument"
-#                 if "LSTM" in save_name:
-#                     seq_col = "datetime"
-
-#                 samplers = get_samplers_cpp(label_gen, dict(zip(stages, date_ranges[data_i])), seq_col=seq_col)
-#                 # for k in samplers.keys():
-#                 #     samplers[k].use_label_weight = save_name == "cls"
-#                     # print(f"use_label_weight {samplers[k].use_label_weight}")
-#                 schedule = [32]
-#                 # schedule = [128, 256, 512]
-#                 # schedule = [512]
-#                 if saved_models:
-#                     models = saved_models[-1]["models"]
-#                     epoch_idx = saved_models[-1]["epoch_idx"]
-#                 else:
-#                     models = {}
-
-#                     for i in schedule:
-#                         model_name = f"s_{i}_{save_name}"
-#                         models[model_name] = model_class(
-#                             samplers[stages[0]].feature_columns(),
-#                             scheduler_step=i,
-#                         )
-
-#                     epoch_idx = -1
-
-#                 batch_size = 32
-#                 # if not seq_col:
-#                 #     batch_size *= 384
-#                 # trainer = Trainer(8092 * 4, samplers, models)
-#                 trainer = Trainer(batch_size, samplers, models)
-#                 # print(epoch_idx, i + 1)
-#                 trainer.run(epoch_idx, data_i + 1 if use_roller else epoch, save_name)
 
 
 def train(insts, exp_i, loader = []):
-    def label_gen(data):
-        limit = 0.099
-        if data["instrument"][0][2:5] in ["300", "688"]:
-            limit = 0.199
-        if data["instrument"][0][2:3] in ["8"]:
-            limit = 0.299
-
-        rs = np.zeros(data["close"].shape)
-
-        up_flag = (data["change"] >= limit) & (data["high"] - data["close"] < 1e-5)
-
-        # cannot_buy = (data["change"] >= limit) & (data["high"] - data["low"] < 1e-5)
-
-        # cannot_sell = (data["change"] <= -limit) & (data["high"] - data["low"] < 1e-5)
-
-        rs[up_flag] = 1
-
-        pred = np.zeros(rs.shape)
-        pred[:] = float("nan")
-        
-        from numpy.lib.stride_tricks import sliding_window_view
-
-        # window_shape = 30
-        # lrs = np.concatenate([[0] *  window_shape, rs[:-1]])
-        # lrs = np.sum(sliding_window_view(lrs, window_shape=window_shape), axis = -1)
-
-        # assert len(lrs) == len(rs)
-
-        lrs = np.concatenate([[float("nan")], rs[:-1]])
-        nrs = np.concatenate([rs[1:], [float("nan")]])
-
-        first_up = (lrs == 0) & (rs == 1)
-
-        pred[first_up & (nrs == 1)] = 1
-        pred[first_up & (nrs == 0)] = 0
-        if pred[-1] != 0 and pred[-1] != 1 and first_up[-1]:
-            pred[-1] = 0
-
-        # pred = np.concatenate(
-        #         [
-        #             (data["open"][2:] / data["open"][1:-1] - 1) * 100,
-        #             [float("nan")] * 2,
-        #         ]
-        # )[:l]
-
-        # pred = np.concatenate(
-        #         [
-        #             (data["open"][2:] / data["close"][1:-1] - 1) * 100,
-        #             [float("nan")] * 2,
-        #         ]
-        # )[:l]
-
-        # inc = np.concatenate(
-        #         [
-        #             (data["open"][1:] / data["close"][:-1] - 1) * 100,
-        #             [float("nan")] * 1,
-        #         ]
-        # )[:l]
-        # valid = (np.abs(pred) <= 0.098) & (np.abs(data["change"]) < 0.098)
-        # valid = (np.abs(inc) <= 0.098 * 100) # 去掉涨停板/跌停板
-        # valid = (inc <= 0.098 * 100) # 去掉涨停板
-        # pred[~valid] = float("nan")
-
-        # print(f'valid {valid.sum()} vs {len(valid)}' )
-        # 1/0
-
-        # for k in data.keys():
-        #     data[k] = data[k][valid]
-
-        return {
-            # "pred": np.concatenate(
-            #     [np.log(data["open"][1:] / data["close"][:-1]), [float("nan")] * 1]
-            # )[:l],
-            "pred": pred,
-            # "cs": ~cannot_sell,
-            # "cb": ~cannot_buy,
-            # "inc": inc,
-            # "pred": np.concatenate(
-            #     [np.log(data["open"] / data["close"]), []]
-            # )[:l],
-            # "pred": np.concatenate(
-            #     [np.abs(np.log(data["open"][2:] / data["open"][1:-1])), [float("nan")] * 2]
-            # )[:l],
-            # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
-            #  "cls": get_label(data),
-        }
-
+    
+    from .labels import down_to_up
+    label_gen = down_to_up
     stages = ["train", "valid", "predict"]
 
     use_roller = False
     epoch = 500
     date_ranges = [
-        ("2008-01-01", "2025-05-20"),
-        ("2025-05-21", "2055-01-01"),
+        ("2008-01-01", "2025-01-01"),
+        ("2025-01-01", "2055-01-01"),
         # ("2008-01-01", "2023-12-31"),
-        ("2025-05-21", "2055-01-01"),
+        ("2025-01-01", "2055-01-01"),
     ]
     # date_ranges = [
     #     ("2008-01-01", "2024-01-01"),

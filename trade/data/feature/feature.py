@@ -25,9 +25,9 @@ def corr(x, y):
 
 
 class Feature:
-    def __init__(self, data, window=5, rolling_window=[5, 10, 20, 30, 60]):
+    def __init__(self, data, rolling_window=[20]):
         self.data = data
-        self.window = window
+        # self.window = window
         self.rolling_window = rolling_window
 
     def __call__(self):
@@ -131,7 +131,8 @@ class Feature:
     def cord(self, data):
         name = "cord"
         for i in self.rolling_window:
-            v = data["volume"][1:] / (data["volume"][:-1])
+            v = data["volume"][1:] / (data["volume"][:-1] + 1e-5)
+            
             # c = data["change"]
             v = np.concatenate([[float("nan")] * i, v])
             c = np.concatenate([[float("nan")] * (i - 1), data["change"]])
@@ -290,41 +291,41 @@ class Feature:
             data[f"{name}_d_{i}"] = down
         return None
 
-    def z_pos(self, data):
-        name = "bollinger"
-        name_rs = "z_pos"
+    # def z_pos(self, data):
+    #     name = "bollinger"
+    #     name_rs = "z_pos"
 
-        def _get(n="high"):
-            # high = np.concatenate([[float("nan")], data[n][:-1]])
-            # high = np.maximum(data[n], high)
-            return data[n] / data["close"]
-            # return high
+    #     def _get(n="high"):
+    #         # high = np.concatenate([[float("nan")], data[n][:-1]])
+    #         # high = np.maximum(data[n], high)
+    #         return data[n] / data["close"]
+    #         # return high
 
-        high = _get()
-        low = _get("low")
+    #     high = _get()
+    #     low = _get("low")
 
-        def _pos(name):
-            p0 = low > data[name]
-            p1 = (low <= data[name]) & (high > data[name])
-            if "_d_" in name:
-                p2 = (high <= data[name])
-                return [p0, p1, p2]
-            return [p0, p1]
+    #     def _pos(name):
+    #         p0 = low > data[name]
+    #         p1 = (low <= data[name]) & (high > data[name])
+    #         if "_d_" in name:
+    #             p2 = (high <= data[name])
+    #             return [p0, p1, p2]
+    #         return [p0, p1]
 
-        for i in self.rolling_window:
-            rs = []
-            for n in [f"{name}_u_{i}", f"ma_{i}", f"{name}_d_{i}"]:
-                rs += _pos(n)
-            v = np.zeros(data["close"].shape)
-            # if i == 20:
-            #     print("rs", rs)
-            for p in rs:
-                v = v * 2 + ((v == 0) & p)
-            # if i == 20:   
-            #     print(i, f"{name_rs}_{i}", v, data["close"], np.unique(np.sort(v)))
-            data[f"{name_rs}_{i}"] = v
+    #     for i in self.rolling_window:
+    #         rs = []
+    #         for n in [f"{name}_u_{i}", f"ma_{i}", f"{name}_d_{i}"]:
+    #             rs += _pos(n)
+    #         v = np.zeros(data["close"].shape)
+    #         # if i == 20:
+    #         #     print("rs", rs)
+    #         for p in rs:
+    #             v = v * 2 + ((v == 0) & p)
+    #         # if i == 20:   
+    #         #     print(i, f"{name_rs}_{i}", v, data["close"], np.unique(np.sort(v)))
+    #         data[f"{name_rs}_{i}"] = v
 
-        return None
+    #     return None
 
     def imax(self, data):
         name = "imax"

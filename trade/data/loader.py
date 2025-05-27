@@ -95,15 +95,16 @@ class BaseDataloader:
                 data.append(single)
         return pd.concat(data)
 
-    def add_columns(self, data):
+    def add_columns(self, data, add_label=True):
         base_columns = list(data.keys())
         if self.extend_feature:
             from .feature.feature import Feature
             data = Feature(data=data)()
-        labels = {}
-        for gen in self.label_generators:
-            labels.update({f"y_{k}": v for k, v in gen(data).items()})
-        data.update(labels)
+        if add_label:
+            labels = {}
+            for gen in self.label_generators:
+                labels.update({f"y_{k}": v for k, v in gen(data).items()})
+            data.update(labels)
         return base_columns, data
     
     @property
@@ -230,28 +231,7 @@ class FtDataloader(BaseDataloader):
     
 
     def get_stock_params(self):
-        # inst  = [p[2:] for p in get_inst(os.path.expanduser("~/output/qlib_bin")).keys()]
-        # print(inst)
-        # files = os.listdir(self.path)
-        
-        # inst  = get_inst(os.path.expanduser("~/output/qlib_bin"))
-        # keys = inst.keys()
-        # keys = [
-        #     k[2:] for k,v in inst.items()
-        # ]
-        
-        # file_keys = [p[:6] for p in files if p.endswith(".csv")]
-        # keys = set(keys).intersection(set(file_keys))
-        # keys = sorted(list(keys))[:100]
-        
-        
-        # params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv") and p[:6] in keys]
-        # print(f"{len(files)} vs {len(params)}")
-        
-        # return params
-        
         files = os.listdir(self.path)
-        # params = [(os.path.join(self.path, p),) for p in files if p.endswith(".csv")]
         params = [(os.path.join(self.path, p),) for p in files if p.endswith(".feather") or p.endswith(".csv")]
         return params
 
@@ -267,62 +247,56 @@ class FtDataloader(BaseDataloader):
         
         df = df[columns]
         df.columns = columns_rename
-        
-        # volume == 0
-        # no_valid = (df["volume"] == 0)
-        # print(df[["datetime", "close", "volume"]][no_valid])
-        # for k in "open,close,high,low,volume,change".split(","):
-        #     # df[k][no_valid] = float("nan")
-        #     df.loc[no_valid, k] = float('nan')
-        
+
         datetime = pd.to_datetime(df["datetime"])
-        if datetime.diff().iloc[-1].total_seconds() == 3600:
-            resample_range = [1, 5 ,15, 30, 60, 120]
-            resample = "min"
+        df["Y"] = datetime.dt.isocalendar().year
+        df["W"] = datetime.dt.isocalendar().week
+        df["D"] = datetime.dt.isocalendar().day
+        if datetime.diff().iloc[-1].total_seconds() == 60:
+            resample_range = [None, ["Y","W","D","H","5min"]]
+            df["H"] = datetime.dt.hour
+            df["5min"] = datetime.dt.minute //  5
         else:
-            resample_range = [1, 5 , 20]
-            resample = "D"
+            resample_range = [None, ["Y","W"]]
         
-        df_i = df["open,close,high,low,volume,change".split(",")]
-        # df_i["datetime_2"] = datetime
-        df_i = df_i.set_index(datetime)
         total = None
         def change_func(series):
             v = 1
             for p in series:
-                v *= (1+p)
+                v *= (1 + p)
             return v - 1
         for min in resample_range:
-            if min > 1:
-                df_i = df_i.resample(f"{min}{resample}").agg({
+            if min is not None:
+                agg = {
                     "open":"first",
                     "close":"last",
                     "high":"max",
                     "low":"min",
                     "volume":"sum",
-                    "change":change_func
-                }).dropna()
+                    "change":change_func,
+                }
+                agg = {
+                    p: agg[p] if p in agg else "last" for p in df.columns if p not in min
+                }
+                df_i = df[columns_rename + min].groupby(min).agg(agg).dropna()
+            else:
+                df_i = df
 
             if len(df_i) == 0 :
                 break
             
-            # print(df_i)  
-            # df_i["change"] = df_i["close"].pct_change(fill_method=None)
-            data = {k: df_i[k].to_numpy() for k in df_i.columns}
-            data["datetime"] = df_i.index.to_numpy()
-            data["instrument"] = np.full(data["datetime"].shape, df["instrument"].iloc[0])
-            base_columns, data = self.add_columns(data)
+            data = {k: df_i[k].to_numpy() for k in df_i.columns if k in columns_rename}
+            base_columns, data = self.add_columns(data, min is None)
             data = pd.DataFrame.from_dict(data)
-            data.set_index("datetime")
-            assert "datetime" in data.columns
+            
             if total is None:
                 total = data
             else:
-                columns = [c for c in data.columns if c not in base_columns or c == "datetime"]
-                # print("cols", base_columns)
+                columns = [c for c in data.columns if c not in base_columns or c in self.indices]
                 data = data[columns]
-                data.columns = [f"{col}_{min}m" if col != "datetime" else col for col in data.columns ]
-                total = total.merge(data, how="left", on=["datetime"]).ffill()
-        # total["instrument"] = df["instrument"]
-        print(total.tail(10))
+                data.columns = [f"{col}_{min[-1]}" if col not in self.indices else col for col in data.columns]
+                total = total.merge(data, how="left", on=self.indices)
+                columns = [c for c in data.columns if c not in self.indices]
+                total.loc[:,columns].ffill(inplace=True)
+    
         return base_columns, total
