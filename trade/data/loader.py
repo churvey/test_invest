@@ -247,6 +247,8 @@ class FtDataloader(BaseDataloader):
         
         df = df[columns]
         df.columns = columns_rename
+        
+        print(df)
 
         datetime = pd.to_datetime(df["datetime"])
         df["Y"] = datetime.dt.isocalendar().year
@@ -298,5 +300,5 @@ class FtDataloader(BaseDataloader):
                 total = total.merge(data, how="left", on=self.indices)
                 columns = [c for c in data.columns if c not in self.indices]
                 total.loc[:,columns].ffill(inplace=True)
-    
+
         return base_columns, total

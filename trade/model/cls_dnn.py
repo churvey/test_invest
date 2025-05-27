@@ -48,7 +48,7 @@ class FocalBCEWithLogitsLoss(nn.Module):
 class ClsDNN(Model, nn.Module):
 
     def __init__(
-        self, features, output_dim=2, device="cuda", weight=torch.asarray([0.2, 0.8]), scheduler_step=20
+        self, features, output_dim=2, device="cuda", weight=torch.asarray([0.5, 0.5]), scheduler_step=20
     ):
         nn.Module.__init__(self)
         Model.__init__(self, features)

@@ -49,16 +49,40 @@ def down_to_up(data):
     v = np.zeros(data["close"].shape)
     for p in rs:
         v = v * 2 + ((v == 0) & p)
-    print(v.min(), v.max())
+    # print(v.min(), v.max())
     
     down = (v == 4)
     from numpy.lib.stride_tricks import sliding_window_view
     
-    v_slide = sliding_window_view(v, 20)
+    slide = 20
+    v_slide = sliding_window_view(v, slide)
     
-    open_slide = sliding_window_view(data["open"], 20)
-    profile = (open_slide[1:] - data["open"][:len(open_slide) - len(data["open"]) - 1]) >= 0.04
-    profile &= (v_slide[1:] > 4)
+    open_slide = sliding_window_view(data["open"], slide)
+    profile = (open_slide[1:] - data["open"][:len(open_slide) - len(data["open"]) - 1].reshape([-1, 1]))
+    argmax = np.argmax(profile, axis = -1)
+    argmin = np.argmin(profile, axis = -1)
+    
+    max = np.max(profile, axis = -1)
+    min = np.min(profile, axis = -1)
+    
+    print(f"profile {profile.max()} {profile.min()} {profile.mean()} {np.quantile(profile, 0.99)} {np.quantile(profile, 0.5)} ")
+    
+    
+    # 1/0
+   
+    print(f"shapes {(max >= 0.01).shape} {(min >= -0.005).shape } {(argmax > argmin).shape}")
+    # print(f"values {profile[0]} {profile[:,argmax][0]} {argmax[0]}")
+    can_profile = (max >= 0.01) & ((min >= -0.005) | (argmax > argmin))
+    profile_v = np.where(
+        can_profile, max, np.where(min >= -0.005, profile[:, -1], min)
+    )
+    can_profile = np.concatenate(
+       [can_profile, np.full(len(down) - len(can_profile), False)]
+    )
+    profile_v = np.concatenate(
+       [profile_v, np.full(len(down) - len(profile_v), 0.0)]
+    )
+    # profile &= (v_slide[1:] > 4)
     
     no_upper_before_down = np.all(v_slide <= 4, axis = -1)
     pad = np.full(len(down) - len(no_upper_before_down), False)
@@ -71,17 +95,30 @@ def down_to_up(data):
     # print(no_upper_before_down)
     candi = down & no_upper_before_down
     
-    upper_after_down = np.any(v_slide > 4, axis = -1)
-    upper_after_down = np.concatenate(
-       [upper_after_down, np.full(len(down) - len(upper_after_down) + 1, False)]
-    )[1:].astype(bool)
+    # upper_after_down = np.any(v_slide > 4, axis = -1)
+    # upper_after_down = np.concatenate(
+    #    [upper_after_down, np.full(len(down) - len(upper_after_down) + 1, False)]
+    # )[1:].astype(bool)
+    
+    
     
     pred = np.zeros(v.shape)
     pred[:] = float("nan")
-    pred[candi & upper_after_down ] = 1
-    pred[candi & ~upper_after_down] = 0
+    pred[can_profile] = 1
+    not_profile = ~can_profile
+    a = (np.random.rand(len(can_profile)) <= np.mean(can_profile.astype('float32')))
+    print("pred a", len(a), np.sum(not_profile), np.sum(a))
+    not_profile &= a
+    print("pred b", np.sum(not_profile))
+    pred[not_profile] = 0
+    
+    print(f"pred mean {np.nanmean(pred)} {np.mean(can_profile.astype('float32'))}")
+    
+    assert pred.shape == data["close"].shape
+    assert profile_v.shape == data["close"].shape, (profile_v.shape , data["close"].shape)
     
     return {
-        "pred":pred
+        "pred":pred,
+        "profile_v":profile_v
     }
     

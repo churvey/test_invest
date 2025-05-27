@@ -204,7 +204,7 @@ def get_samplers_cpp(
         #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
         # )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        loader = FtDataloader("./tmp2", [label_gen])
+        loader = FtDataloader("./etf", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 
@@ -239,7 +239,7 @@ def train(insts, exp_i, loader = []):
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 500
+    epoch = 50
     date_ranges = [
         ("2008-01-01", "2025-01-01"),
         ("2025-01-01", "2055-01-01"),
@@ -350,7 +350,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     exps = list(range(4)) 
-    if args.exp[0] > 0:
+    if args.exp[0] >= 0:
         exps = args.exp
     loaders = []
     for exp_id in exps:
