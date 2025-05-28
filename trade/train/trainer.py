@@ -204,7 +204,7 @@ def get_samplers_cpp(
         #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
         # )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        loader = FtDataloader("./tmp2", [label_gen])
+        loader = FtDataloader("./etf", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 

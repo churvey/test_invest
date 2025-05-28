@@ -226,7 +226,7 @@ class FtDataloader(BaseDataloader):
 
     def __init__(self, path, label_generators=[], extend_feature = True):
         super(FtDataloader, self).__init__(path, label_generators, extend_feature)
-        self.down_sample = True
+        self.down_sample = False
         self.features = self.get_features()
         self.days = self.features["datetime"].unique()
         
@@ -306,13 +306,13 @@ class FtDataloader(BaseDataloader):
                 #     df_i["datetime"] = df_i["datetime"] + pd.Timedelta(minutes=int(min.split("min")[0]))
                 
                 # print(df_i[df_i["datetime"] >= "2025-05-27"][["datetime","open", "high","close", "low"]].head(10))
-                print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].head(2))
-                print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].tail(2))
-                # print(df[df.index >= "2025-05-27"][["open", "high","close", "low"]].head(10))
-                print(df[df.index >= "2025-02-24"][["open", "high","close", "low"]].head(20))
-                import time
-                time.sleep(1)
-                1/0
+                # print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].head(2))
+                # print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].tail(2))
+                # # print(df[df.index >= "2025-05-27"][["open", "high","close", "low"]].head(10))
+                # print(df[df.index >= "2025-02-24"][["open", "high","close", "low"]].head(20))
+                # import time
+                # time.sleep(1)
+                # 1/0
                 # [48, 49, 46, 45] 15:30
                 # [49,49,47,46] :15:25
             else:
