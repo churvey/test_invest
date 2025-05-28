@@ -25,7 +25,7 @@ def corr(x, y):
 
 
 class Feature:
-    def __init__(self, data, rolling_window=[20]):
+    def __init__(self, data, rolling_window=[5, 10, 20, 30, 60]):
         self.data = data
         # self.window = window
         self.rolling_window = rolling_window

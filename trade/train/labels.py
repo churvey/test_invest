@@ -57,8 +57,8 @@ def down_to_up(data):
     slide = 20
     v_slide = sliding_window_view(v, slide)
     
-    open_slide = sliding_window_view(data["open"], slide)
-    profile = (open_slide[1:] - data["open"][:len(open_slide) - len(data["open"]) - 1].reshape([-1, 1]))
+    open_slide = sliding_window_view(data["close"], slide)
+    profile = (open_slide[1:] - data["close"][:len(open_slide) - len(data["close"]) - 1].reshape([-1, 1]))
     argmax = np.argmax(profile, axis = -1)
     argmin = np.argmin(profile, axis = -1)
     
@@ -67,15 +67,18 @@ def down_to_up(data):
     
     print(f"profile {profile.max()} {profile.min()} {profile.mean()} {np.quantile(profile, 0.99)} {np.quantile(profile, 0.5)} ")
     
-    
+    i_limit = 0.01
+    d_limit = -0.005
     # 1/0
    
-    print(f"shapes {(max >= 0.01).shape} {(min >= -0.005).shape } {(argmax > argmin).shape}")
+    # print(f"shapes {(max >= i_limit).shape} {(min >= d_limit).shape } {(argmax > argmin).shape}")
     # print(f"values {profile[0]} {profile[:,argmax][0]} {argmax[0]}")
-    can_profile = (max >= 0.01) & ((min >= -0.005) | (argmax > argmin))
+    can_profile = (max >= i_limit) & ((min >= d_limit) | (argmax > argmin))
     profile_v = np.where(
-        can_profile, max, np.where(min >= -0.005, profile[:, -1], min)
+        can_profile, i_limit, np.where(min >= d_limit, profile[:, -1], d_limit)
     )
+    
+    can_profile = profile_v >= i_limit / 2
     can_profile = np.concatenate(
        [can_profile, np.full(len(down) - len(can_profile), False)]
     )
@@ -106,10 +109,10 @@ def down_to_up(data):
     pred[:] = float("nan")
     pred[can_profile] = 1
     not_profile = ~can_profile
-    a = (np.random.rand(len(can_profile)) <= np.mean(can_profile.astype('float32')))
-    print("pred a", len(a), np.sum(not_profile), np.sum(a))
+    a = (np.random.rand(len(can_profile)) <= np.mean(can_profile.astype('float32')) * 2)
+    # print("pred a", len(a), np.sum(not_profile), np.sum(a))
     not_profile &= a
-    print("pred b", np.sum(not_profile))
+    # print("pred b", np.sum(not_profile))
     pred[not_profile] = 0
     
     print(f"pred mean {np.nanmean(pred)} {np.mean(can_profile.astype('float32'))}")

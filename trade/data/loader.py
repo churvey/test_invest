@@ -226,9 +226,10 @@ class FtDataloader(BaseDataloader):
 
     def __init__(self, path, label_generators=[], extend_feature = True):
         super(FtDataloader, self).__init__(path, label_generators, extend_feature)
+        self.down_sample = True
         self.features = self.get_features()
         self.days = self.features["datetime"].unique()
-    
+        
 
     def get_stock_params(self):
         files = os.listdir(self.path)
@@ -248,26 +249,39 @@ class FtDataloader(BaseDataloader):
         df = df[columns]
         df.columns = columns_rename
         
-        print(df)
+        
+        # print(df[["datetime","open", "high","close", "low"]].tail(20))
+        # 1/0
+        if not self.down_sample:
+            data = {k: df[k].to_numpy() for k in df.columns if k in columns_rename}
+            return self.add_columns(data)
+        
+        # print(df)
 
         datetime = pd.to_datetime(df["datetime"])
-        df["Y"] = datetime.dt.isocalendar().year
-        df["W"] = datetime.dt.isocalendar().week
-        df["D"] = datetime.dt.isocalendar().day
+        df["datetime"] = datetime
+        df.set_index("datetime", inplace=True)
+        # df["Y"] = datetime.dt.isocalendar().year
+        # df["W"] = datetime.dt.isocalendar().week
+        # df["D"] = datetime.dt.isocalendar().day
         if datetime.diff().iloc[-1].total_seconds() == 60:
-            resample_range = [None, ["Y","W","D","H","5min"]]
-            df["H"] = datetime.dt.hour
-            df["5min"] = datetime.dt.minute //  5
+            resample_range = [None, "5min"]
+        #     df["H"] = datetime.dt.hour
+        #     df["5min"] = datetime.dt.minute //  5 + datetime.dt.minute % 5 != 0
         else:
-            resample_range = [None, ["Y","W"]]
+            resample_range = [None, "W"]
+        
+        resample_range = resample_range[1:]
         
         total = None
         def change_func(series):
+            # if len(series) == 1:
+            #     return float("nan")
             v = 1
             for p in series:
                 v *= (1 + p)
             return v - 1
-        for min in resample_range:
+        for min_id, min in enumerate(resample_range):
             if min is not None:
                 agg = {
                     "open":"first",
@@ -280,7 +294,27 @@ class FtDataloader(BaseDataloader):
                 agg = {
                     p: agg[p] if p in agg else "last" for p in df.columns if p not in min
                 }
-                df_i = df[columns_rename + min].groupby(min).agg(agg).dropna()
+                
+                
+                if min.endswith('min'):
+                    import datetime
+                    mask = (df.index.time == datetime.time(9, 30))
+                    df.index = df.index.where(~mask, df.index + pd.Timedelta(minutes=1))
+                df_i = df.resample(min, origin="end").agg(agg).dropna()
+                df_i.reset_index(names = ["datetime"], inplace=True)
+                # if min.endswith('min'):
+                #     df_i["datetime"] = df_i["datetime"] + pd.Timedelta(minutes=int(min.split("min")[0]))
+                
+                # print(df_i[df_i["datetime"] >= "2025-05-27"][["datetime","open", "high","close", "low"]].head(10))
+                print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].head(2))
+                print(df_i[df_i["datetime"] >= "2025-02-24"][["datetime","open", "high","close", "low"]].tail(2))
+                # print(df[df.index >= "2025-05-27"][["open", "high","close", "low"]].head(10))
+                print(df[df.index >= "2025-02-24"][["open", "high","close", "low"]].head(20))
+                import time
+                time.sleep(1)
+                1/0
+                # [48, 49, 46, 45] 15:30
+                # [49,49,47,46] :15:25
             else:
                 df_i = df
 
@@ -288,11 +322,11 @@ class FtDataloader(BaseDataloader):
                 break
             
             data = {k: df_i[k].to_numpy() for k in df_i.columns if k in columns_rename}
-            base_columns, data = self.add_columns(data, min is None)
+            base_columns, data = self.add_columns(data, min_id == 0)
             data = pd.DataFrame.from_dict(data)
             
             if total is None:
-                total = data
+                total = data.reset_index(names=["datetime"])
             else:
                 columns = [c for c in data.columns if c not in base_columns or c in self.indices]
                 data = data[columns]
