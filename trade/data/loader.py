@@ -103,7 +103,10 @@ class BaseDataloader:
         if add_label:
             labels = {}
             for gen in self.label_generators:
-                labels.update({f"y_{k}": v for k, v in gen(data).items()})
+                gen_rs = gen(data)
+                if not gen_rs:
+                    return base_columns, {}
+                labels.update({f"y_{k}": v for k, v in gen_rs.items()})
             data.update(labels)
         return base_columns, data
     

@@ -17,6 +17,7 @@ from trade.data.analysis import select_inst, analysis_inst, analysis_pred
 import numpy as np
 import torch
 import argparse
+from .labels import *
 
 
 def get_writer(date=None):
@@ -200,11 +201,11 @@ def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
     if not loader:
-        # loader = QlibDataloader(
-        #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
-        # )
+        loader = QlibDataloader(
+            os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+        )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        loader = FtDataloader("./etf", [label_gen])
+        # loader = FtDataloader("./tmp2", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 
@@ -234,15 +235,16 @@ def get_label(data):
 
 def train(insts, exp_i, loader = []):
     
-    from .labels import down_to_up
-    label_gen = down_to_up
+ 
+    label_gen = volume_up
+    # label_gen = one_into_two
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 50
+    epoch = 20
     date_ranges = [
         ("2008-01-01", "2025-01-01"),
-        ("2025-01-01", "2055-01-01"),
+        ("2025-01-01", "2025-04-01"),
         # ("2008-01-01", "2023-12-31"),
         ("2025-01-01", "2055-01-01"),
     ]

@@ -361,12 +361,38 @@ def analysis_cls():
         preds = [p for p in preds if p is not None]
         print(preds[0])
         # p = preds[0]
-        preds = pd.concat(preds).groupby(["instrument", "datetime"]).agg({"y_p":["sum"], "y":["mean"]}).reset_index()
+        
+        agg = {
+            col:["mean"]
+            for col in preds[-1].columns if col not in ["instrument", "datetime"]
+        }
+        agg.update(
+            {"y_p":["sum"]}
+        )
+        preds = pd.concat(preds).groupby(["instrument", "datetime"]).agg(agg).reset_index()
         preds.columns = [col[0] if col[1] != '' else col[0] for col in preds.columns]
         p = preds.sort_values(["datetime", "instrument"])
         # print(p.tail(20))
         p = p[(p["y_p"] >= 1) | (p["y"]==1)]
         print(p)
+        p.reset_index(drop=True).to_csv("p.csv", sep='\t')
+        
+        p2 = p[(p["y_p"] >= 1)]
+        p2.reset_index(drop=True).to_csv("p2.csv", sep='\t')
+        
+        p3 = p2[["datetime","y","y_p","y_profile_v"]].copy()
+        p3["hit"] = (p3["y"] == p3["y_p"]) * 1.0
+        
+        p3 = p3.groupby(["datetime"]).agg(
+            {
+                "hit":["mean"],
+                "y_profile_v":["sum"]
+            },
+        )
+        p3.columns = [col[0] if col[1] != '' else col[0] for col in p3.columns]
+        p3.reset_index().to_csv("p3.csv",sep="\t")
+        
+        
         
 if __name__ == "__main__":
     # plot_label(label_gen)

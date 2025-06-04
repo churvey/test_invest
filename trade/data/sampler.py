@@ -45,6 +45,10 @@ class Sampler:
             features = features[
                 (features["datetime"] >= begin) & (features["datetime"] < end)
             ]
+            # print("y_pred >= 1",features[features["y_pred"] >= 1])
+            # print("y_profile_v >= 0.005",features[features["y_profile_v"] >= 0.0049])
+            # print("datetime == 2017-02-20 10:35:00",features[features["datetime"] == "2017-02-20 10:35:00"])
+            
             print(f"after select {day_range} features:{len(features)}")
         self.labels = loader.labels
         self.days = loader.days

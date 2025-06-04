@@ -182,13 +182,13 @@ class Feature:
             data[f"{name}_{i}"] = val
         return None
 
-    def vma(self, data):
+    def vstd(self, data):
         def func2(a, b):
             return a / (b + 1e-12)
 
         return self.__rolling__(data, "vstd", np.nanstd, "volume", func2, "volume")
 
-    def vstd(self, data):
+    def vma(self, data):
         def func2(a, b):
             return a / (b + 1e-12)
 
