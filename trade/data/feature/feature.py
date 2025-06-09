@@ -25,9 +25,10 @@ def corr(x, y):
 
 
 class Feature:
-    def __init__(self, data, rolling_window=[5, 10, 20, 30, 60]):
+    def __init__(self, data, features, rolling_window=[5, 10, 20, 30, 60]):
         self.data = data
         # self.window = window
+        self.features = features if isinstance(features, list) else None
         self.rolling_window = rolling_window
 
     def __call__(self):
@@ -39,6 +40,9 @@ class Feature:
         # print([m[0] for m in method_list])
         for m in method_list:
             # print(m[0])
+            if self.features and m[0] not in self.features:
+                continue
+            
             if m[0].startswith("__"):
                 continue
             else:
@@ -282,7 +286,7 @@ class Feature:
             data[f"{name}_{i}"] = val
         return None
 
-    def z_bolling(self, data):
+    def z_bollinger(self, data):
         name = "bollinger"
         for i in self.rolling_window:
             up = data[f"ma_{i}"] + 2 * data[f"std_{i}"]

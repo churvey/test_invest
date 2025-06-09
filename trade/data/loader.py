@@ -99,7 +99,7 @@ class BaseDataloader:
         base_columns = list(data.keys())
         if self.extend_feature:
             from .feature.feature import Feature
-            data = Feature(data=data)()
+            data = Feature(data=data, features=self.extend_feature)()
         if add_label:
             labels = {}
             for gen in self.label_generators:

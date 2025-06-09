@@ -380,13 +380,14 @@ def analysis_cls():
         p2 = p[(p["y_p"] >= 1)]
         p2.reset_index(drop=True).to_csv("p2.csv", sep='\t')
         
-        p3 = p2[["datetime","y","y_p","y_profile_v"]].copy()
+        p3 = p2[["datetime","y","y_p","y_profile_v","instrument"]].copy()
         p3["hit"] = (p3["y"] == p3["y_p"]) * 1.0
         
         p3 = p3.groupby(["datetime"]).agg(
             {
                 "hit":["mean"],
-                "y_profile_v":["sum"]
+                "y_profile_v":["sum"],
+                "instrument":["count"]
             },
         )
         p3.columns = [col[0] if col[1] != '' else col[0] for col in p3.columns]
