@@ -34,6 +34,9 @@ class Sampler:
         
         self.total_ins = np.sort(loader.features["instrument"].drop_duplicates().to_numpy())
         
+        # print("z_pos", np.unique(features["y_z_pos"].to_numpy()))
+        # 1/0
+        
         if day_range:
             begin, end = day_range
             if self.seq_col == "datetime":

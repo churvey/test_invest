@@ -54,6 +54,9 @@ def volume_up(data):
     max_profile = sliding_window_view(data["high"], slide)[2:] / open[1:len(open_slide) - len(data["open"]) - 1].reshape([-1, 1]) - 1
     min_profile = sliding_window_view(data["low"], slide)[2:] / open[1:len(open_slide) - len(data["open"]) - 1].reshape([-1, 1]) - 1
     
+    next_open = open[1:] / data["close"][:-1] -1
+    
+    
     
     # profile = (open_slide[2:] / open[1:len(open_slide) - len(data["open"]) - 1].reshape([-1, 1]) - 1)
     max_profile[np.isnan(max_profile)] = 0.0
@@ -80,6 +83,10 @@ def volume_up(data):
     profile_v = np.concatenate(
        [profile_v, np.full(len(open) - len(profile_v), 0.0)]
     )
+    
+    next_open = np.concatenate(
+       [next_open, np.full(len(open) - len(next_open), 0.0)]
+    )
     max_profile = np.concatenate(
        [max_profile, np.full((len(open) - len(max_profile), max_profile.shape[-1]), 0.0)]
     )
@@ -100,19 +107,27 @@ def volume_up(data):
     return {
         "pred":pred,
         "profile_v":profile_v,
+        "next_open":next_open,
         **{f"max_{i}":max_profile[:,i] for i in range(max_profile.shape[-1])},
         **{f"min_{i}":min_profile[:,i] for i in range(min_profile.shape[-1])}
     }
     
     
 if __name__ == "__main__":
-    f1 = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [volume_up], extend_feature=["vma", "ma", "std", "z_bollinger"]).features
+    # f1 = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [volume_up], extend_feature=["vma", "ma", "std", "z_bollinger"]).features
+    f1 = FtDataloader("./qmt", [volume_up], extend_feature=["vma", "ma", "std", "z_bollinger"]).features
     
     print(f1)
     
     print(f1["y_pred"].mean())
     
     f1 = f1[f1["y_pred"] > 0]
+    print(len(f1))
+    # f1 = f1[f1["y_min_19"]< -0.05]
+    # f1 = f1.head(1).to_dict()
+    # for k,v in f1.items():
+    #     print(k,"==>", v)
+
     
     print(f1)
     
@@ -126,8 +141,10 @@ if __name__ == "__main__":
         k = f"y_min_{i}"
         k2 = f"y_max_{i}"
         print(k, "==>", f1[k].quantile([0.1, 0.3, 0.5, 0.7,0.9]).to_numpy())
-        print(k2, "==>", f1[k2].quantile([0.1, 0.3, 0.5, 0.7,0.9]).to_numpy())
-            
+        # print(k2, "==>", f1[k2].quantile([0.1, 0.3, 0.5, 0.7,0.9]).to_numpy())
+    
+    print("next", "==>", f1["y_next_open"].quantile([0.1, 0.3, 0.5, 0.7,0.9]).to_numpy())
+    print("next", "==>", f1["y_next_open"].mean())
     
     # f2 = FtDataloader("./tmp2", []).features
     # print(f2)

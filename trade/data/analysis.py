@@ -372,7 +372,7 @@ def analysis_cls():
         preds = pd.concat(preds).groupby(["instrument", "datetime"]).agg(agg).reset_index()
         preds.columns = [col[0] if col[1] != '' else col[0] for col in preds.columns]
         p = preds.sort_values(["datetime", "instrument"])
-        # print(p.tail(20))
+        print(p.tail(20))
         p = p[(p["y_p"] >= 1) | (p["y"]==1)]
         print(p)
         p.reset_index(drop=True).to_csv("p.csv", sep='\t')

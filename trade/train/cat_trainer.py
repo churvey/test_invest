@@ -15,6 +15,7 @@ from trade.model.reg_cat import RegCat
 from trade.train.utils import *
 import numpy as np
 import torch
+from .labels import *
 
 
 
@@ -108,36 +109,55 @@ class CatTrainer:
                     yps.append(pred)
             print("corrcoef:", np.corrcoef(np.concatenate(ys), np.concatenate(yps))[0, 1]) 
 
-def get_samplers_cpp(label_gen, date_ranges, csi=None):
-    # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+# def get_samplers_cpp(label_gen, date_ranges, csi=None):
+#     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen])
+#     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
+#     loader = FtDataloader("./qmt", [label_gen])
+#     return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
+
+def get_samplers_cpp(
+    label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
+):
+    if not loader:
+        # loader = QlibDataloader(
+        #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+        # )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-    loader = FtDataloader("tmp", [label_gen])
-    return {k: SamplersCpp(loader, v) for k, v in date_ranges.items()}
+        loader = FtDataloader("./qmt", [label_gen])
+    return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}
 
 if __name__ == "__main__":
 
     with Context() as ctx:
 
-        def label_gen(data):
-            l = data["close"].shape[0]
-            return {
-                "pred": np.concatenate(
-                    [np.log(data["open"][2:] / data["close"][1:-1]), [float("nan")] * 2]
-                )[:l],
-                # "pred": np.concatenate(
-                #     [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
-                # )[:l],
-                # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
-                #  "cls": get_label(data),
-            }
+        # def label_gen(data):
+        #     l = data["close"].shape[0]
+        #     return {
+        #         "pred": np.concatenate(
+        #             [np.log(data["open"][2:] / data["close"][1:-1]), [float("nan")] * 2]
+        #         )[:l],
+        #         # "pred": np.concatenate(
+        #         #     [data["close"][2:] / data["close"][1:-1] - 1, [float("nan")] * 2]
+        #         # )[:l],
+        #         # "cls": np.concatenate([data["limit_flag"][1:], [float("nan")]])[:l],
+        #         #  "cls": get_label(data),
+        #     }
+            
+        label_gen = volume_up
 
         stages = ["train", "valid", "predict"]
 
+        # date_ranges = [
+        #     ("2008-01-01", "2023-12-31"),
+        #     ("2024-01-01", "2025-12-31"),
+        #     ("2024-01-01", "2025-12-31"),
+        # ]
         date_ranges = [
-            ("2008-01-01", "2023-12-31"),
-            ("2024-01-01", "2025-12-31"),
-            ("2024-01-01", "2025-12-31"),
-        ]
+            ("2008-01-01", "2025-04-15"),
+            ("2025-04-15", "2025-05-01"),
+            # ("2008-01-01", "2023-12-31"),
+            ("2025-05-01", "2055-01-01"),
+    ]
 
         # date_ranges = [
         #     ("2008-01-01", "2014-12-31"),
@@ -151,8 +171,8 @@ if __name__ == "__main__":
         # for save_name in ["cls", "reg"]:
         # for save_name in ["reg", "cls"]:
         for save_name in ["cat"]:
-            for k in samplers.keys():
-                samplers[k].use_label_weight = save_name == "cls"
+            # for k in samplers.keys():
+            #     samplers[k].use_label_weight = save_name == "cls"
                 # print(f"use_label_weight {samplers[k].use_label_weight}")
             # schedule = [8, 16, 64]
             schedule = [128, 256, 512]

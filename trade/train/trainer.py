@@ -201,11 +201,11 @@ def get_samplers_cpp(
     label_gen, date_ranges, csi=None, seq_col="instrument", loader=None, insts=None
 ):
     if not loader:
-        loader = QlibDataloader(
-            os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
-        )
+        # loader = QlibDataloader(
+        #     os.path.expanduser("~/output/qlib_bin"), [label_gen], csi, insts=insts
+        # )
     # loader = QlibDataloader(os.path.expanduser("~/output/qlib_bin"), [label_gen], "csi300")
-        # loader = FtDataloader("./tmp2", [label_gen])
+        loader = FtDataloader("./qmt", [label_gen])
     return {k: SamplersCpp(loader, v, seq_col) for k, v in date_ranges.items()}, loader
 
 
@@ -235,18 +235,28 @@ def get_label(data):
 
 def train(insts, exp_i, loader = []):
     
- 
-    label_gen = volume_up
+    # 12 {'limit': 0.05, 'low': 20.0, 'slide': 10.0} 0.3974317136050648 61286
+    # 8 {'limit': 0.05, 'low': 15.0, 'slide': 10.0} 0.3879064976371407 110671
+    label_gen = volume_up_wrapper(
+        # {'limit': 0.02, 'low': 5.6, 'slide': 5.0, "vma":0.8} 
+        
+        {'limit': 0.1, 'low': 5.6, 'slide': 20, "vma":0.8} 
+        # {'limit': 0.1, 'low': 4, 'slide': 10, "vma":0.6} 
+    )
+    
+    # 0.42720984232344966, 493542, 'slide:5__low:5.6__limit:0.02__vma:0.8'
+    # (0.44519159142306447, 299361, 'slide:20__low:5.6__limit:0.02__vma:0.8')
+    
     # label_gen = one_into_two
     stages = ["train", "valid", "predict"]
 
     use_roller = False
-    epoch = 20
+    epoch = 10
     date_ranges = [
-        ("2008-01-01", "2025-01-01"),
-        ("2025-01-01", "2025-04-01"),
+        ("2008-01-01", "2025-04-15"),
+        ("2025-04-15", "2025-05-01"),
         # ("2008-01-01", "2023-12-31"),
-        ("2025-01-01", "2055-01-01"),
+        ("2025-04-15", "2055-01-01"),
     ]
     # date_ranges = [
     #     ("2008-01-01", "2024-01-01"),
