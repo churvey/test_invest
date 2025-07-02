@@ -43,7 +43,8 @@ class Feature:
             if self.features and m[0] not in self.features:
                 continue
             
-            if m[0].startswith("__"):
+            if (m[0].startswith("__") or m[0].endswith("__")) and (not self.features or m[0] not in self.features):
+                # print(f"skip {m[0]}")
                 continue
             else:
                 r = m[1](self, data)
@@ -295,41 +296,41 @@ class Feature:
             data[f"{name}_d_{i}"] = down
         return None
 
-    # def z_pos(self, data):
-    #     name = "bollinger"
-    #     name_rs = "z_pos"
+    def z_pos__(self, data):
+        name = "bollinger"
+        name_rs = "z_pos"
 
-    #     def _get(n="high"):
-    #         # high = np.concatenate([[float("nan")], data[n][:-1]])
-    #         # high = np.maximum(data[n], high)
-    #         return data[n] / data["close"]
-    #         # return high
+        def _get(n="high"):
+            # high = np.concatenate([[float("nan")], data[n][:-1]])
+            # high = np.maximum(data[n], high)
+            return data[n] / data["close"]
+            # return high
 
-    #     high = _get()
-    #     low = _get("low")
+        high = _get()
+        low = _get("low")
 
-    #     def _pos(name):
-    #         p0 = low > data[name]
-    #         p1 = (low <= data[name]) & (high > data[name])
-    #         if "_d_" in name:
-    #             p2 = (high <= data[name])
-    #             return [p0, p1, p2]
-    #         return [p0, p1]
+        def _pos(name):
+            p0 = low > data[name]
+            p1 = (low <= data[name]) & (high > data[name])
+            if "_d_" in name:
+                p2 = (high <= data[name])
+                return [p0, p1, p2]
+            return [p0, p1]
 
-    #     for i in self.rolling_window:
-    #         rs = []
-    #         for n in [f"{name}_u_{i}", f"ma_{i}", f"{name}_d_{i}"]:
-    #             rs += _pos(n)
-    #         v = np.zeros(data["close"].shape)
-    #         # if i == 20:
-    #         #     print("rs", rs)
-    #         for p in rs:
-    #             v = v * 2 + ((v == 0) & p)
-    #         # if i == 20:   
-    #         #     print(i, f"{name_rs}_{i}", v, data["close"], np.unique(np.sort(v)))
-    #         data[f"{name_rs}_{i}"] = v
+        for i in self.rolling_window:
+            rs = []
+            for n in [f"{name}_u_{i}", f"ma_{i}", f"{name}_d_{i}"]:
+                rs += _pos(n)
+            v = np.zeros(data["close"].shape)
+            # if i == 20:
+            #     print("rs", rs)
+            for p in rs:
+                v = v * 2 + ((v == 0) & p)
+            # if i == 20:   
+            #     print(i, f"{name_rs}_{i}", v, data["close"], np.unique(np.sort(v)))
+            data[f"{name_rs}_{i}"] = v
 
-    #     return None
+        return None
 
     def imax(self, data):
         name = "imax"

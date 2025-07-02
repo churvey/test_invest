@@ -49,13 +49,14 @@ class Summarizer:
 
 class BaseDataloader:
 
-    def __init__(self, path, label_generators=[], extend_feature = True):
+    def __init__(self, path, label_generators=[], extend_feature = True, rolling_window=[5, 10, 20, 30, 60]):
         self.path = path
         self.extend_feature = extend_feature
         self.label_generators = label_generators
         self.indices = ["instrument", "datetime"]
         self.base_columns = []
         self.features = None
+        self.rolling_window = rolling_window
     
     @property
     def feature_columns(self):
@@ -99,7 +100,7 @@ class BaseDataloader:
         base_columns = list(data.keys())
         if self.extend_feature:
             from .feature.feature import Feature
-            data = Feature(data=data, features=self.extend_feature)()
+            data = Feature(data=data, features=self.extend_feature, rolling_window=self.rolling_window)()
         if add_label:
             labels = {}
             for gen in self.label_generators:
@@ -117,8 +118,8 @@ class BaseDataloader:
 
 class QlibDataloader(BaseDataloader):
 
-    def __init__(self, path, label_generators=[], csi = None, extend_feature = True, insts=[]):
-        super(QlibDataloader, self).__init__(path, label_generators, extend_feature)
+    def __init__(self, path, label_generators=[], csi = None, extend_feature = True, insts=[], rolling_window=[5, 10, 20, 30, 60]):
+        super(QlibDataloader, self).__init__(path, label_generators, extend_feature, rolling_window)
         self.csi = csi
         self.csi_ins = {}
         self.insts = insts
@@ -227,9 +228,9 @@ class QlibDataloader(BaseDataloader):
 
 class FtDataloader(BaseDataloader):
 
-    def __init__(self, path, label_generators=[], extend_feature = True):
-        super(FtDataloader, self).__init__(path, label_generators, extend_feature)
-        self.down_sample = False
+    def __init__(self, path, label_generators=[], extend_feature = True, rolling_window=[5, 10, 20, 30, 60], down_sample = False):
+        super(FtDataloader, self).__init__(path, label_generators, extend_feature, rolling_window)
+        self.down_sample = down_sample
         self.features = self.get_features()
         self.days = self.features["datetime"].unique()
         
@@ -263,18 +264,18 @@ class FtDataloader(BaseDataloader):
 
         datetime = pd.to_datetime(df["datetime"])
         df["datetime"] = datetime
-        df.set_index("datetime", inplace=True)
         # df["Y"] = datetime.dt.isocalendar().year
         # df["W"] = datetime.dt.isocalendar().week
         # df["D"] = datetime.dt.isocalendar().day
-        if datetime.diff().iloc[-1].total_seconds() == 60:
-            resample_range = [None, "5min"]
-        #     df["H"] = datetime.dt.hour
-        #     df["5min"] = datetime.dt.minute //  5 + datetime.dt.minute % 5 != 0
-        else:
-            resample_range = [None, "W"]
+        # if datetime.diff().iloc[-1].total_seconds() == 60:
+        #     resample_range = ["1d"]
+        #     # resample_range = [None, "5min", "1d"]
+        # #     df["H"] = datetime.dt.hour
+        # #     df["5min"] = datetime.dt.minute //  5 + datetime.dt.minute % 5 != 0
+        # else:
+        #     resample_range = [None, "W"]
         
-        resample_range = resample_range[1:]
+        resample_range = self.down_sample
         
         total = None
         def change_func(series):
@@ -286,6 +287,8 @@ class FtDataloader(BaseDataloader):
             return v - 1
         for min_id, min in enumerate(resample_range):
             if min is not None:
+                if "datetime" in df.columns:
+                    df.set_index("datetime", inplace=True)
                 agg = {
                     "open":"first",
                     "close":"last",
@@ -303,7 +306,10 @@ class FtDataloader(BaseDataloader):
                     import datetime
                     mask = (df.index.time == datetime.time(9, 30))
                     df.index = df.index.where(~mask, df.index + pd.Timedelta(minutes=1))
-                df_i = df.resample(min, origin="end").agg(agg).dropna()
+                df_i = df.resample(min, origin="end").agg(agg)
+                # print("before drop nan\n", df_i)
+                df_i = df_i.dropna()
+                # print("after drop nan\n", df_i)
                 df_i.reset_index(names = ["datetime"], inplace=True)
                 # if min.endswith('min'):
                 #     df_i["datetime"] = df_i["datetime"] + pd.Timedelta(minutes=int(min.split("min")[0]))
@@ -325,17 +331,23 @@ class FtDataloader(BaseDataloader):
                 break
             
             data = {k: df_i[k].to_numpy() for k in df_i.columns if k in columns_rename}
-            base_columns, data = self.add_columns(data, min_id == 0)
+            base_columns, data = self.add_columns(data, total is None)
             data = pd.DataFrame.from_dict(data)
             
             if total is None:
-                total = data.reset_index(names=["datetime"])
+                # total = data.reset_index(names=["datetime"])
+                total = data
             else:
                 columns = [c for c in data.columns if c not in base_columns or c in self.indices]
                 data = data[columns]
-                data.columns = [f"{col}_{min[-1]}" if col not in self.indices else col for col in data.columns]
+                data.columns = [f"{col}_{min}" if col not in self.indices else col for col in data.columns]
+                # total_columns = 
                 total = total.merge(data, how="left", on=self.indices)
+                print_cols = ["datetime"] + [p for p in total.columns if "boll" in p]
+                # print(total[print_cols].head(20))
                 columns = [c for c in data.columns if c not in self.indices]
-                total.loc[:,columns].ffill(inplace=True)
-
+                tmp = total[columns].ffill()
+                total[columns] = tmp
+               
+                print(total[print_cols].head(20))
         return base_columns, total
