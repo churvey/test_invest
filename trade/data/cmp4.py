@@ -57,7 +57,7 @@ def t_test_series(y, short=3, long = 2):
 class StateMachine():
     def __init__(self):
         
-        self.bars = [f"{p}min" for p in [1, 5, 30, 60]] + ["1d"]
+        self.bars = [f"{p}min" for p in [1, 5, 15, 30, 60]] + ["1d"]
         self.last_time = {p:None for p in self.bars}
         self.values = {p:{} for p in self.bars}
         self.states = {p:{} for p in self.bars}
@@ -186,7 +186,7 @@ class Strategy:
         self.cash = 100000
         self.hold = 0
         self.percentage = 0.0
-        self.min_amount = 100
+        self.min_amount = 1000
         self.deal_amount = 0
         self.total_value = self.cash
         self.history = []
@@ -249,6 +249,8 @@ if __name__ == "__main__":
     #     print(f2[["cs_20"]].describe())
     
     f2 = FtDataloader("./etf2", [], extend_feature=False).features
+    f2 = f2[f2["datetime"] < "2025-01-01"]
+    f2 = f2[f2["datetime"] >= "2024-01-01"]
     print(f2)
     
     machine = StateMachine()
