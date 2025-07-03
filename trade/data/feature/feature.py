@@ -255,6 +255,22 @@ class Feature:
                 torch.asarray(data), 0.8, dim=axis
             ).numpy(),
         )
+        
+    def cs(self, data):
+        
+        def func(d, axis):
+            high_i = d.shape[-1] - np.argmax(d, axis)
+            high = np.max(d, axis)
+            low_i = d.shape[-1] -  np.argmin(d, axis)
+            low = np.min(d, axis)
+            
+            return ((d[:, -1] - high) / high_i + (d[:, -1] - low) / low_i) * d.shape[-1]
+        
+        return self.__rolling__(
+            data,
+            "cs",
+            func,
+        )
 
     def qtld(self, data):
         return self.__rolling__(

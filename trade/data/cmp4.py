@@ -62,9 +62,14 @@ class StateMachine():
         self.values = {p:{} for p in self.bars}
         self.states = {p:{} for p in self.bars}
         self.pending = {p:None for p in self.bars}
-        self.extend_feature=["vma", "ma", "std", "z_bollinger", "z_pos__"]
+        self.extend_feature=["vma", "ma", "std", "z_bollinger", "z_pos__", "cs"]
         self.window_size = 20
+        self.state_size = 100
+        self.state_columns = [f"cs_{self.window_size}"]
+        self.statistic = {bar:{p:{} for p in self.state_columns} for bar in self.bars}
         
+    def is_state_columns(self, col):
+        return col in self.state_columns
     
     def update_state(self, bar):
         data = {k: np.array(v) for k,v in self.values[bar].items()}
@@ -74,19 +79,53 @@ class StateMachine():
         for k, v in data.items():
             if k in self.states[bar]:
                 self.states[bar][k] = np.append(self.states[bar][k], [v[-1]])
-                
             else:
                 self.states[bar][k] = np.array([v[-1]])
             
         if len(self.states[bar]["close"]) > self.window_size:
+            def limit(k):
+                return self.window_size if not self.is_state_columns(k) else self.state_size
             self.states[bar] = {
-                k: v[-self.window_size:] for k, v in self.states[bar].items()
+                k: v[-limit(k):] for k, v in self.states[bar].items()
             }
-            if bar == "1d" and np.all(self.states[bar][f"z_pos_{self.window_size}"] >= 8 ):
-                print("bar", bar,self.states[bar]["datetime"][-1], self.states[bar][f"z_pos_{self.window_size}"])
+            for s in self.state_columns:
+                # print(self.states.keys())
+                value = self.states[bar][s]
+                if len(value) >= self.state_size:
+                    self.statistic[bar][s]["mean"] = np.nanmean(value).item()
+                    self.statistic[bar][s]["std"] = np.nanstd(value).item()
+                    self.statistic[bar][s]["min"] = np.nanmin(value).item()
+                    self.statistic[bar][s]["max"] = np.nanmax(value).item()
+                    self.statistic[bar][s]["p75"] = np.nanpercentile(value, 75).item()
+                    self.statistic[bar][s]["p50"] = np.nanpercentile(value, 50).item()
+                    self.statistic[bar][s]["p25"] = np.nanpercentile(value, 25).item()
+                    
+            # if bar == "1d" and np.all(self.states[bar][f"z_pos_{self.window_size}"] >= 8 ):
+            if bar == "1d" :
+                # print("bar", bar,self.states[bar]["datetime"][-1], self.states[bar][f"z_pos_{self.window_size}"])
+                # print("bar", bar,self.states[bar]["datetime"][-1])
             # if self.states[bar]["datetime"] == datetime.strptime("2025-05-27 15:00:00", '%m-%d-%Y %H:%M:%S'):
-                for k, v in self.states[bar].items():
-                    print(k, "===>", v)
+                # pos = self.states[bar][f"z_pos_{self.window_size}"]
+                # cs = self.states[bar][f"cs_{self.window_size}"]
+                # print(self.states[bar]["datetime"][-1], "==>", list(zip(pos.tolist(), cs.tolist())))
+                # for k, v in self.states[bar].items():
+                #     print_b = np.any([p in k for p in ["z_pos", "cs"]])
+                #     if print_b:
+                #         print(k, "===>", v)
+                # print(self.statistic[bar])       
+                # print(self.states[bar][self.state_columns[0]])
+                pass
+        
+        s = self.state_columns[0]
+        if len(self.statistic[bar][s]) > 0:
+            v = self.states[bar][s][-1].item()
+            
+            if (v >= self.statistic[bar][s]["p75"] and v > 0) or (v <= self.statistic[bar][s]["p25"] and v < 0):
+                # print(self.statistic[bar][s]["p75"], self.statistic[bar][s]["p25"], self.statistic[bar][s]["min"], v)
+                return v
+           
+        
+        return 0
         
         
     def next(self, data):
@@ -100,7 +139,7 @@ class StateMachine():
         is_open = (dt.minute == 30 and dt.hour == 9)
         is_close = (dt.minute == 0 and dt.hour == 15)
         
-        
+        amount = {}
         for _, bar in enumerate(self.bars):
             if self.pending[bar] is None:
                 self.pending[bar] = data
@@ -133,12 +172,67 @@ class StateMachine():
                         k: v[-self.window_size:] for k, v in self.values[bar].items()
                     }
                 self.pending[bar] = None
-                self.update_state(bar)
-
+                amount[bar]= self.update_state(bar)
+        # print(amount)
+        # return sum(amount.values())
+        return amount
                 
                 
                     
-                       
+
+class Strategy:
+    def __init__(self, state):
+        self.state = state
+        self.cash = 100000
+        self.hold = 0
+        self.percentage = 0.0
+        self.min_amount = 100
+        self.deal_amount = 0
+        self.total_value = self.cash
+        self.history = []
+        # self.min_value
+        self.max_value = 0
+        self.max_drop_ratio = 0
+        
+    # def __repr__(self):
+        
+        
+    def next(self, data):
+        self.total_value = self.hold * data["close"] + self.cash
+        self.percentage =  self.hold * data["close"] / self.total_value
+        
+        amounts = self.state.next(data)
+        if not amounts:
+            return
+        amount = sum(amounts.values())
+        if amount + self.percentage < 0:
+            amount = -self.percentage
+        if amount + self.percentage > 1:
+            amount = 1 - self.percentage
+        
+        unit = int(self.total_value * abs(amount) / data["close"]) // self.min_amount * self.min_amount
+        if unit < self.min_amount:
+            return
+        else:
+            unit = -unit if amount < 0 else unit
+            self.hold += unit
+            self.cash -= unit * data["close"]
+            assert self.cash >=0, (self.percentage, amount, unit, self.total_value)
+            assert self.hold >=0
+            # 
+            self.deal_amount += abs(unit)
+            
+            self.max_value = max(self.max_value, self.total_value)
+            drop_ratio = (self.max_value - self.total_value) / self.max_value
+            self.max_drop_ratio = max(drop_ratio, self.max_drop_ratio)
+            
+            print(data["datetime"], data["close"], unit, self.max_drop_ratio, self.total_value, 1 - self.cash / self.total_value, self.deal_amount)
+            # self.history.append(self.total_value)
+        
+        # amount = min(amount, 1-)
+        # if amount * data["close"] 
+    
+    
             
         
 
@@ -147,18 +241,26 @@ class StateMachine():
 
 if __name__ == "__main__":    
     # f1 = FtDataloader("./tmp/2", [], extend_feature=["vma", "ma", "std", "z_bollinger"], rolling_window=[20], down_sample=[]).features
-    down_sample = [None, "5m", "15m", "30m", "60m", "120m", "1d", "1w"]
-    down_sample =  [None, "5min"]
+    # down_sample = [None, "5m", "15m", "30m", "60m", "120m", "1d", "1w"]
+    # down_sample =  [None, "5min","15min", "30min", "60min", "120min", "1d",]
+    # for d in down_sample:
+    #     f2 = FtDataloader("./etf2", [], extend_feature=["cs"], rolling_window=[20], down_sample=[d] if d else None).features
+    #     print(d)
+    #     print(f2[["cs_20"]].describe())
+    
     f2 = FtDataloader("./etf2", [], extend_feature=False).features
     print(f2)
     
     machine = StateMachine()
+    ss = Strategy(state=machine)
     for i, row in f2.iterrows():
-        machine.next(row)
+        ss.next(row)
         if i % 1000 == 0:
             print(f"prcocessed {i} {row['datetime']}")
     
     
+    
+ 
     # def f(f1):
     #     f1 = f1[f1["datetime"] >= "2025"]
         
